@@ -1,386 +1,376 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Name & Birth Info — Demo with Pyodide + Chart.js</title>
-  <!-- Tailwind via CDN (works offline if replaced with local build) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- Pyodide (Python in the browser) -->
-  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+  <title>Birth Insights – Demo</title>
   <style>
-    /* Minimal focus styles for a11y if Tailwind not loaded */
-    :focus { outline: 2px solid #111827; outline-offset: 2px; }
+    :root { --bg:#0b1020; --panel:#141a33; --ink:#e7ecff; --muted:#9fb2ff33; --accent:#7aa2ff; }
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0b1020,#0e1530);color:var(--ink);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{max-width:980px;margin:auto;padding:24px}
+    h1{font-size:1.75rem;margin:0 0 6px}
+    h2{font-size:1.1rem;margin:0 0 8px;color:#d5deff}
+    p.sub{margin:0 0 18px;color:#c6d3ffcc}
+    .card{background:radial-gradient(1200px 600px at -15% -15%,#22316633 0%,#080c1d00 50%),var(--panel);border:1px solid #233057;border-radius:16px;box-shadow:0 10px 30px #0006}
+    .pad{padding:18px}
+    .grid{display:grid;gap:16px}
+    .inputs{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    label{display:block;font-weight:600;margin:0 0 6px}
+    input,select,button,textarea{width:100%;box-sizing:border-box;font:inherit}
+    input,select,textarea{padding:10px 12px;background:#0f1530;border:1px solid #2b3a66;color:var(--ink);border-radius:12px;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#6e97ff;box-shadow:0 0 0 3px #6e97ff33}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .btn{cursor:pointer;background:linear-gradient(180deg,#7aa2ff,#628cff);color:#08122e;border:none;border-radius:12px;padding:10px 14px;font-weight:700}
+    .btn.secondary{background:#0f1530;color:#cfe0ff;border:1px solid #2b3a66}
+    .muted{color:#c6d3ff99;font-size:.95rem}
+    .chart{height:360px}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9rem;white-space:pre-wrap;background:#0f1530;padding:10px;border-radius:10px;border:1px solid #2b3a66;color:#d7e2ff}
+    .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#243461;border:1px solid #2b3a66;color:#cfe0ff;font-size:.85rem}
+    .ok{color:#8ff2c6}
+    .err{color:#ff9e9e}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.35.2"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
 </head>
-<body class="bg-gray-50 text-gray-900">
-  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-white px-3 py-2 rounded shadow">Skip to main content</a>
+<body>
+  <div class="wrap">
+    <h1>Birth Insights <span class="badge">single-file demo</span></h1>
+    <p class="sub">Enter your name and (optionally) your birth state and year. The page will call your <strong>Python</strong> functions in the browser (via Pyodide) and then render visualizations.</p>
 
-  <header class="max-w-6xl mx-auto px-4 py-6">
-    <h1 class="text-2xl font-bold">Name & Birth Info — Interactive Summary</h1>
-    <p class="text-sm text-gray-600">Client‑side demo using Pyodide to run your Python functions. No server required.</p>
-  </header>
-
-  <main id="main" class="max-w-6xl mx-auto px-4 pb-16 grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Input Card -->
-    <section class="lg:col-span-1">
-      <div class="bg-white rounded-2xl shadow p-5">
-        <h2 class="text-lg font-semibold mb-4">Your Info</h2>
-        <form id="user-form" class="space-y-4" novalidate>
-          <div>
-            <label for="name" class="block text-sm font-medium">Name <span class="text-red-600">*</span></label>
-            <input id="name" name="name" type="text" required maxlength="80" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., Alex" />
-            <p id="name-help" class="text-xs text-gray-500 mt-1">Required — we’ll greet you by this name.</p>
-          </div>
-
-          <div>
-            <label for="state" class="block text-sm font-medium">Birth State (optional)</label>
-            <input id="state" name="state" list="states" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., Nebraska" />
-            <datalist id="states"></datalist>
-          </div>
-
-          <div>
-            <label for="year" class="block text-sm font-medium">Birth Year (optional)</label>
-            <input id="year" name="year" type="number" min="1900" max="2100" step="1" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 1990" />
-          </div>
-
-          <div class="flex items-center gap-3 pt-2">
-            <button id="submit-btn" type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 font-medium disabled:opacity-50">Run</button>
-            <button id="reset-btn" type="button" class="rounded-xl border px-4 py-2">Reset</button>
-            <button id="demo-btn" type="button" class="ml-auto text-sm underline">Try demo</button>
-          </div>
-
-          <div class="flex items-center gap-2 pt-2">
-            <input id="use-mocks" type="checkbox" class="rounded" checked />
-            <label for="use-mocks" class="text-sm">Use mock Python functions (uncheck after pasting your code)</label>
-          </div>
-        </form>
-
-        <div class="mt-4 text-xs text-gray-600">
-          <p><strong>Status:</strong> <span id="status-text">Loading Pyodide…</span></p>
-          <p id="error-text" class="text-red-700 hidden"></p>
+    <div class="card pad" id="formCard">
+      <div class="grid inputs">
+        <div>
+          <label for="name">Name (required)</label>
+          <input id="name" type="text" placeholder="Ada" required />
         </div>
+        <div>
+          <label for="state">Birth state (optional)</label>
+          <input id="state" type="text" placeholder="Nebraska" />
+        </div>
+        <div>
+          <label for="year">Birth year (optional)</label>
+          <input id="year" type="number" min="1900" max="2100" placeholder="1992" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn" id="runBtn">Run analysis</button>
+        <button class="btn secondary" id="resetBtn" type="button">Reset</button>
+        <span class="muted" id="status">Python runtime: loading…</span>
+      </div>
+    </div>
 
-        <details class="mt-4">
-          <summary class="text-sm font-medium">How to add your Python functions</summary>
-          <ol class="list-decimal list-inside text-sm mt-2 space-y-1">
-            <li>Paste your functions into the Python block below where indicated.</li>
-            <li>Uncheck “Use mock Python functions”.</li>
-            <li>Click <em>Run</em>.</li>
-          </ol>
+    <div class="grid" style="margin-top:18px">
+      <!-- Summary section -->
+      <div class="card pad">
+        <h2>Summary</h2>
+        <div id="summary" class="mono">(Your summary will appear here.)</div>
+      </div>
+
+      <!-- Visuals section -->
+      <div class="card pad">
+        <h2>Visuals</h2>
+        <div id="charts"></div>
+      </div>
+
+      <div class="card pad">
+        <h2>Quick tests</h2>
+        <div class="row">
+          <button class="btn secondary" id="testJerome1993">Test: Jerome, 1993</button>
+          <button class="btn secondary" id="testAdaNone">Test: Ada, (no year)</button>
+          <button class="btn secondary" id="testLowerJerome1993">Test: jerome (lower), 1993</button>
+        </div>
+        <p class="muted" style="margin-top:8px">These call the same <span class="mono">compute_visuals</span> function and help confirm the dataset loaded and matching works.</p>
+      </div>
+
+      <div class="card pad">
+        <h2>How to plug in your Python</h2>
+        <ol class="muted">
+          <li>Find the section in the code below labeled <strong>PASTE YOUR PYTHON FUNCTIONS HERE</strong>.</li>
+          <li>Paste your functions there. Make sure to expose a single function named <span class="mono">compute_visuals(name, state=None, year=None)</span> that returns a JSON-serializable dict like:
+            <div class="mono">{
+  "summary": "short string",
+  "charts": [
+    {"title": "My Chart", "x": [1,2,3], "y":[2,3,1], "x_label":"Month", "y_label":"Value"}
+  ]
+}</div>
+          </li>
+          <li>Click <strong>Run analysis</strong>.</li>
+        </ol>
+      </div>
+
+      <div class="card pad">
+        <h2>Embedded code (for quick edits)</h2>
+        <details>
+          <summary>Show Python stub & JS runner (now with diagnostics + tests)</summary>
+          <pre class="mono" id="codeView"></pre>
         </details>
       </div>
-    </section>
+    </div>
+  </div>
 
-    <!-- Results Area -->
-    <section class="lg:col-span-2">
-      <div class="bg-white rounded-2xl shadow p-5" role="region" aria-live="polite" aria-atomic="true">
-        <h2 class="text-lg font-semibold mb-2">Results</h2>
-        <div id="summary" class="mb-4">
-          <h3 id="summary-title" class="text-xl font-semibold"></h3>
-          <p id="summary-subtitle" class="text-gray-600"></p>
-          <ul id="summary-bullets" class="list-disc list-inside mt-2 space-y-1"></ul>
-        </div>
+<script>
+  const PY_CODE = `
+# ===================== PASTE YOUR PYTHON FUNCTIONS HERE =====================
+# Minimal example that fetches your CSV from GitHub, matches on name & year,
+# and returns a simple English sentence + an optional bar chart.
+# Works entirely in the browser via Pyodide (no server needed).
 
-        <div id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+from pyodide.http import open_url
+import io, csv, json, sys
 
-        <div id="charts" class="space-y-6">
-          <canvas id="chart1" height="140" class="w-full"></canvas>
-          <canvas id="chart2" height="140" class="w-full"></canvas>
-        </div>
+# Prefer the canonical raw URL and fall back to the originally provided one
+URL_CANDIDATES = [
+    "https://raw.githubusercontent.com/jeromeroehmdoane/names/main/small_demo.csv",  # canonical
+    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo.csv"  # provided
+]
 
-        <p id="footnote" class="text-xs text-gray-500 mt-6"></p>
-      </div>
-    </section>
-  </main>
+def _read_name_data(url: str):
+    """Read CSV from URL and yield normalized rows {name:str, year:int, count:int}.
+    Returns (rows, meta) where meta has: url, rows_parsed, header, sample_rows.
+    """
+    text = open_url(url).read()
+    rdr = csv.DictReader(io.StringIO(text))
+    rows = [row for row in rdr]
 
-  <!-- Inline JSON with US states for datalist (keeps single-file runnable) -->
-  <script type="application/json" id="states-json">[
-    "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"
-  ]</script>
+    # Helper: get with fallbacks
+    def g(r, *keys, default=""):
+        for k in keys:
+            if k in r and r[k] is not None:
+                return r[k]
+        return default
 
-  <!-- === PYTHON: Your functions go here (or leave mocks on) === -->
-  <script type="text/x-python" id="user-python">
-# Paste your real functions here. They should return the shapes documented below.
-# If your signatures differ, create thin wrappers with the expected names.
+    norm = []
+    for r in rows:
+        name = g(r, 'name','Name').strip()
+        yraw = g(r, 'year','Year').strip()
+        craw = g(r, 'frequency','Frequency','freq','Freq','count','Count','n','N','Number','births','Births','value','Value').strip()
+        if not name:
+            continue
+        try:
+            year = int(float(yraw)) if yraw else None
+        except Exception:
+            year = None
+        try:
+            count = int(float(craw)) if craw else 0
+        except Exception:
+            count = 0
+        if year is None:
+            continue
+        norm.append({'name': name, 'year': year, 'count': count})
 
-# Expected return shapes:
-# summarize_user(name:str, state:Optional[str]=None, year:Optional[int]=None) -> {
-#   'title': str, 'subtitle': str, 'bullets': list[str]
-# }
-# get_visualization_data(state:Optional[str]=None, year:Optional[int]=None) -> {
-#   'series': [ { 'id': 'chart1'|'chart2', 'type': 'bar'|'line'|'pie', 'labels': list, 'values': list, 'title': str, 'yLabel': str } ],
-#   'schema': { 'notes': str, 'source': str }
-# }
-# get_quick_stats(state:Optional[str]=None, year:Optional[int]=None) -> {
-#   'cards': [ { 'label': str, 'value': Any } ]
-# }
-
-# --- Example wrappers (delete when pasting real code) ---
-# def summarize_user(name, state=None, year=None):
-#     ...
-# def get_visualization_data(state=None, year=None):
-#     ...
-# def get_quick_stats(state=None, year=None):
-#     ...
-  </script>
-
-  <!-- === PYTHON: Mock implementations (used when checkbox is ON) === -->
-  <script type="text/x-python" id="mock-python">
-from typing import Optional
-
-def summarize_user(name: str, state: Optional[str] = None, year: Optional[int] = None):
-    return {
-        'title': f"Hello, {name}!",
-        'subtitle': "Here’s a quick snapshot based on what you shared.",
-        'bullets': [
-            f"Birth state: {state or '—'}",
-            f"Birth year: {year or '—'}",
-            "(Mock data) Replace with your Colab functions."
-        ]
+    meta = {
+        'url': url,
+        'rows_parsed': len(norm),
+        'header': list(rows[0].keys()) if rows else [],
+        'sample_rows': rows[:3]
     }
+    return norm, meta
 
-def get_visualization_data(state: Optional[str] = None, year: Optional[int] = None):
-    labels = ["A","B","C","D"]
-    return {
-        'series': [
-            { 'id': 'chart1', 'type': 'bar', 'labels': labels, 'values': [3,7,5,2], 'title': 'Example Bar', 'yLabel': 'Units' },
-            { 'id': 'chart2', 'type': 'line','labels': labels, 'values': [2,4,6,4], 'title': 'Example Line','yLabel': 'Score' }
-        ],
-        'schema': { 'notes': 'Mock dataset', 'source': 'Local' }
+
+def compute_visuals(name, state=None, year=None):
+    """
+    Match user-provided name/year to counts from the CSV. If year omitted, report
+    totals and peak. Also expose lightweight diagnostics so you can verify that
+    the dataset loaded correctly from GitHub Raw.
+    """
+    q_name = (name or '').strip()
+    if not q_name:
+        return {"summary": "Please provide a name.", "charts": [], "debug": {"note": "missing name"}}
+
+    # Normalize for case-insensitive matching
+    q_lower = q_name.lower()
+    try:
+        q_year = int(year) if year is not None and str(year).strip() else None
+    except Exception:
+        q_year = None
+
+    # Try candidate URLs until one parses nonzero rows
+    last_meta = {}
+    data = []
+    for U in URL_CANDIDATES:
+        try:
+            data, meta = _read_name_data(U)
+            last_meta = meta
+            if len(data) > 0:
+                break
+        except Exception as e:
+            last_meta = {"url": U, "error": str(e)}
+            data = []
+
+    # Build series for the given name
+    series = {}
+    for r in data:
+        if r['name'].lower() == q_lower:
+            series[r['year']] = series.get(r['year'], 0) + r['count']
+
+    if not data:
+        msg = ("Could not load any rows from the dataset. Check that the CSV is public "
+               "and that the URL supports CORS. Tried URL: " + str(last_meta.get('url')))
+        return {"summary": msg, "charts": [], "debug": last_meta}
+
+    if not series:
+        msg = f"I couldn't find the name '{q_name}' in the dataset."
+        return {"summary": msg, "charts": [], "debug": last_meta}
+
+    if q_year is not None:
+        c = int(series.get(q_year, 0))
+        msg = f"You were one of {c} {q_name}'s born in {q_year}."
+        # Include ALL available years for this name in the dataset (no windowing)
+        years_sorted = sorted(series.keys())
+        x = years_sorted
+        y = [int(series[y]) for y in x]
+        charts = [{"title": f"Counts for {q_name} by year", "x": x, "y": y, "x_label": "Year", "y_label": "Count"}]
+        return {"summary": msg, "charts": charts, "debug": last_meta}
+    else:
+        total = int(sum(series.values()))
+        peak_year = max(series, key=lambda y: series[y])
+        peak_count = int(series[peak_year])
+        msg = (f"We found {total} occurrences of the name {q_name} across all years. "
+               f"Peak popularity in {peak_year} with {peak_count} births.")
+        years_sorted = sorted(series.keys())
+        x = years_sorted
+        y = [int(series[y]) for y in x]
+        charts = [{"title": f"Counts for {q_name} by year", "x": x, "y": y, "x_label": "Year", "y_label": "Count"}]
+        return {"summary": msg, "charts": charts, "debug": last_meta}
+# ===================== END USER PYTHON SECTION ==============================
+`;
+
+  const status = document.getElementById('status');
+  const codeView = document.getElementById('codeView');
+  codeView.textContent = PY_CODE;
+
+  let pyodide = null;
+  let pyReady = (async () => {
+    try {
+      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+      status.innerHTML = 'Python runtime: <span class="ok">ready</span>';
+      return true;
+    } catch (err) {
+      status.innerHTML = 'Python runtime: <span class="err">failed to load</span>';
+      console.error(err);
+      return false;
     }
+  })();
 
-def get_quick_stats(state: Optional[str] = None, year: Optional[int] = None):
-    return {
-        'cards': [
-            { 'label': 'Inputs Seen', 'value': 'OK' },
-            { 'label': 'Records', 'value': 4 },
-            { 'label': 'Score', 'value': 87 },
-            { 'label': 'State Provided', 'value': bool(state) }
-        ]
+  const elName = document.getElementById('name');
+  const elState = document.getElementById('state');
+  const elYear = document.getElementById('year');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const chartsDiv = document.getElementById('charts');
+  const summaryDiv = document.getElementById('summary');
+
+  function clearOutputs(){
+    chartsDiv.innerHTML = '';
+    summaryDiv.textContent = '(Your summary will appear here.)';
+  }
+
+  resetBtn.addEventListener('click', () => {
+    elName.value = '';
+    elState.value = '';
+    elYear.value = '';
+    clearOutputs();
+  });
+
+  // Quick tests
+  const btnTest1 = document.getElementById('testJerome1993');
+  const btnTest2 = document.getElementById('testAdaNone');
+  function runQuickTest(nm, yr){
+    elName.value = nm; elYear.value = yr ?? ''; elState.value = '';
+    runBtn.click();
+  }
+  if (btnTest1) btnTest1.addEventListener('click', () => runQuickTest('Jerome', '1993'));
+  if (btnTest2) btnTest2.addEventListener('click', () => runQuickTest('Ada', ''));
+
+  runBtn.addEventListener('click', async () => {
+    clearOutputs();
+    if(!elName.value.trim()){
+      alert('Please enter a name.');
+      elName.focus();
+      return;
     }
-  </script>
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
 
-  <!-- === APP SCRIPT === -->
-  <script>
-    /**
-     * App state
-     */
-    let pyodide = null;
-    let charts = {};
+    try{
+      const ok = await pyReady;
+      if(!ok) throw new Error('Pyodide not ready');
 
-    const el = (id) => document.getElementById(id);
+      await pyodide.runPythonAsync(PY_CODE);
 
-    /** Sanitize a simple text input (strip tags) */
-    function sanitize(str) {
-      return (str || '').replace(/<[^>]*>/g, '').trim();
-    }
+      pyodide.globals.set('name_js', elName.value);
+      pyodide.globals.set('state_js', elState.value);
+      pyodide.globals.set('year_js', elYear.value);
 
-    /** Load states into datalist */
-    function loadStates() {
-      try {
-        const states = JSON.parse(el('states-json').textContent);
-        const datalist = el('states');
-        datalist.innerHTML = states.map(s => `<option value="${s}"></option>`).join('');
-      } catch (e) {
-        console.warn('Failed to load states list', e);
+      const outJson = await pyodide.runPythonAsync(`
+import json
+name = (name_js or '').strip()
+state = (state_js or '').strip() or None
+try:
+    year = int(year_js) if str(year_js).strip() else None
+except Exception:
+    year = None
+res = compute_visuals(name=name, state=state, year=year)
+json.dumps(res)
+`);
+
+      const result = JSON.parse(outJson);
+      renderSummary(result.summary);
+      // Show lightweight diagnostics if available
+      if (result.debug) {
+        const diag = document.createElement('div');
+        diag.className = 'muted';
+        diag.style.marginTop = '8px';
+        diag.textContent = `Data source: ${result.debug.url || 'unknown'} | rows parsed: ${result.debug.rows_parsed || 0}`;
+        summaryDiv.appendChild(diag);
       }
-    }
+      renderCharts(result.charts || []);
 
-    /** Initialize Pyodide and preload mock code */
-    async function initPyodide() {
-      try {
-        el('status-text').textContent = 'Loading Pyodide…';
-        pyodide = await loadPyodide({ stdout: () => {}, stderr: (m) => console.warn(m) });
-        el('status-text').textContent = 'Pyodide loaded';
-        // Load mocks initially; real code will be loaded on demand if checkbox off
-        await pyodide.runPythonAsync(el('mock-python').textContent);
-      } catch (err) {
-        el('status-text').textContent = 'Pyodide failed to load';
-        el('error-text').textContent = String(err);
-        el('error-text').classList.remove('hidden');
-        throw err;
-      }
+    }catch(err){
+      console.error(err);
+      summaryDiv.innerHTML = `<span class="err">Error:</span> ${String(err)}`;
+    }finally{
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run analysis';
     }
+  });
 
-    /** Replace functions with user-provided Python */
-    async function loadUserPython() {
-      const code = el('user-python').textContent.trim();
-      if (!code) return; // nothing to load
-      // Create a temporary module namespace so repeated runs overwrite cleanly
-      const wrapped = `\n# === User Code Start ===\n` + code + `\n# === User Code End ===`;
-      await pyodide.runPythonAsync(wrapped);
+  // Rendering
+  function renderSummary(text){
+    summaryDiv.textContent = text || '(No summary returned)';
+  }
+
+  function renderCharts(charts){
+    const chartsRoot = document.getElementById('charts');
+    chartsRoot.innerHTML = '';
+    if(!Array.isArray(charts) || charts.length === 0){
+      const stub = document.createElement('div');
+      stub.className = 'muted';
+      stub.textContent = 'No charts returned. Your function should return a list under "charts".';
+      chartsRoot.appendChild(stub);
+      return;
     }
+    charts.forEach((c, i) => {
+      const id = `plot_${i}`;
+      const holder = document.createElement('div');
+      holder.className = 'chart';
+      holder.id = id;
+      chartsRoot.appendChild(holder);
 
-    /** Fetch callable references from Python */
-    function getPyFns() {
-      const g = pyodide.globals;
-      return {
-        summarize_user: g.get('summarize_user'),
-        get_visualization_data: g.get('get_visualization_data'),
-        get_quick_stats: g.get('get_quick_stats')
+      const trace = { type: 'scatter', mode: 'lines+markers', x: c.x || [], y: c.y || [] };
+      const layout = {
+        title: c.title || `Chart ${i+1}`,
+        margin: {l:48, r:20, t:48, b:48},
+        xaxis: { title: c.x_label || 'x' },
+        yaxis: { title: c.y_label || 'y' },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: {color: '#e7ecff'}
       };
-    }
-
-    /** Render helpers */
-    function renderSummary(data) {
-      el('summary-title').textContent = data?.title || '';
-      el('summary-subtitle').textContent = data?.subtitle || '';
-      const ul = el('summary-bullets');
-      ul.innerHTML = '';
-      (data?.bullets || []).forEach(b => {
-        const li = document.createElement('li');
-        li.textContent = String(b);
-        ul.appendChild(li);
-      });
-    }
-
-    function renderKPIs(stats) {
-      const container = el('kpis');
-      container.innerHTML = '';
-      const cards = stats?.cards || [];
-      cards.slice(0, 4).forEach(({ label, value }) => {
-        const div = document.createElement('div');
-        div.className = 'rounded-xl border p-3 text-center';
-        const l = document.createElement('div');
-        l.className = 'text-xs text-gray-500';
-        l.textContent = label;
-        const v = document.createElement('div');
-        v.className = 'text-xl font-semibold';
-        v.textContent = String(value);
-        div.append(l, v);
-        container.appendChild(div);
-      });
-    }
-
-    function destroyChart(id) {
-      if (charts[id]) { charts[id].destroy(); delete charts[id]; }
-    }
-
-    function renderCharts(viz) {
-      const series = viz?.series || [];
-      const canvases = ['chart1', 'chart2'];
-      // Clear/destroy existing
-      canvases.forEach(destroyChart);
-      canvases.forEach(id => {
-        // Clear canvas for screen readers
-        const c = el(id);
-        const ctx = c.getContext('2d');
-        ctx.clearRect(0, 0, c.width, c.height);
-      });
-      // Render up to two
-      series.slice(0, 2).forEach((s, i) => {
-        const id = canvases[i];
-        const ctx = el(id).getContext('2d');
-        charts[id] = new Chart(ctx, {
-          type: s.type || 'bar',
-          data: {
-            labels: s.labels || [],
-            datasets: [{ label: s.yLabel || 'Value', data: s.values || [] }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: true }, title: { display: !!s.title, text: s.title || '' } },
-            scales: (s.type === 'pie') ? {} : { y: { beginAtZero: true } }
-          }
-        });
-      });
-      const note = viz?.schema?.notes || '';
-      const src = viz?.schema?.source || '';
-      el('footnote').textContent = [note, src && `Source: ${src}`].filter(Boolean).join(' — ');
-    }
-
-    /** Main submit handler */
-    async function onSubmit(e) {
-      e.preventDefault();
-      el('error-text').classList.add('hidden');
-
-      // Validate inputs
-      const name = sanitize(el('name').value);
-      if (!name) {
-        el('name').focus();
-        return;
-      }
-      let state = sanitize(el('state').value);
-      const yearVal = sanitize(el('year').value);
-      const year = yearVal ? parseInt(yearVal, 10) : null;
-      if (Number.isNaN(year)) {
-        el('error-text').textContent = 'Year must be a valid integer.';
-        el('error-text').classList.remove('hidden');
-        return;
-      }
-
-      el('submit-btn').disabled = true;
-      el('status-text').textContent = 'Running Python…';
-
-      try {
-        // Load appropriate code into Python
-        if (el('use-mocks').checked) {
-          await pyodide.runPythonAsync(el('mock-python').textContent);
-        } else {
-          // Ensure user code present; if empty, warn
-          await pyodide.runPythonAsync(el('mock-python').textContent); // provide baseline in case user code only defines a subset
-          await loadUserPython();
-        }
-
-        const { summarize_user, get_visualization_data, get_quick_stats } = getPyFns();
-
-        // Call Python functions and convert to JS
-        const pyKw = { state: state || null, year: year ?? null };
-        const sumRes = summarize_user.callKwargs(null, { name, ...pyKw }).toJs({ dict_hook: Object });
-        const kpiRes = get_quick_stats.callKwargs(null, pyKw).toJs({ dict_hook: Object });
-        const vizRes = get_visualization_data.callKwargs(null, pyKw).toJs({ dict_hook: Object });
-
-        renderSummary(sumRes);
-        renderKPIs(kpiRes);
-        renderCharts(vizRes);
-        el('status-text').textContent = 'Done';
-      } catch (err) {
-        console.error(err);
-        el('status-text').textContent = 'Error';
-        el('error-text').textContent = String(err);
-        el('error-text').classList.remove('hidden');
-      } finally {
-        el('submit-btn').disabled = false;
-      }
-    }
-
-    /** Reset handler */
-    function onReset() {
-      el('user-form').reset();
-      ['summary-title','summary-subtitle','footnote'].forEach(id => el(id).textContent = '');
-      el('summary-bullets').innerHTML = '';
-      el('kpis').innerHTML = '';
-      ['chart1','chart2'].forEach(destroyChart);
-      el('status-text').textContent = 'Ready';
-      el('error-text').classList.add('hidden');
-    }
-
-    /** Demo prefill */
-    async function onDemo() {
-      el('name').value = 'Alex';
-      el('state').value = 'Nebraska';
-      el('year').value = '1990';
-      // Trigger submit
-      const evt = new Event('submit', { cancelable: true });
-      el('user-form').dispatchEvent(evt);
-    }
-
-    // Wire up
-    window.addEventListener('DOMContentLoaded', async () => {
-      loadStates();
-      await initPyodide();
-      el('status-text').textContent = 'Ready';
-      el('user-form').addEventListener('submit', onSubmit);
-      el('reset-btn').addEventListener('click', onReset);
-      el('demo-btn').addEventListener('click', onDemo);
-      // Disable submit until name is non-empty
-      const toggleSubmit = () => { el('submit-btn').disabled = !sanitize(el('name').value); };
-      el('name').addEventListener('input', toggleSubmit);
-      toggleSubmit();
+      Plotly.newPlot(id, [trace], layout, {displayModeBar: true, responsive: true});
     });
-  </script>
+  }
+</script>
 </body>
 </html>

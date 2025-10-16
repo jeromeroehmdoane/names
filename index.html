@@ -4,20 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Name & Birth Info — Demo with Pyodide + Chart.js</title>
+  <!-- Tailwind via CDN (works offline if replaced with local build) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Pyodide (Python in the browser) -->
   <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
   <style>
+    /* Minimal focus styles for a11y if Tailwind not loaded */
     :focus { outline: 2px solid #111827; outline-offset: 2px; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
   <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-white px-3 py-2 rounded shadow">Skip to main content</a>
+
   <header class="max-w-6xl mx-auto px-4 py-6">
     <h1 class="text-2xl font-bold">Name & Birth Info — Interactive Summary</h1>
     <p class="text-sm text-gray-600">Client‑side demo using Pyodide to run your Python functions. No server required.</p>
   </header>
+
   <main id="main" class="max-w-6xl mx-auto px-4 pb-16 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Input Card -->
     <section class="lg:col-span-1">
       <div class="bg-white rounded-2xl shadow p-5">
         <h2 class="text-lg font-semibold mb-4">Your Info</h2>
@@ -27,29 +34,35 @@
             <input id="name" name="name" type="text" required maxlength="80" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., Alex" />
             <p id="name-help" class="text-xs text-gray-500 mt-1">Required — we’ll greet you by this name.</p>
           </div>
+
           <div>
             <label for="state" class="block text-sm font-medium">Birth State (optional)</label>
             <input id="state" name="state" list="states" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., Nebraska" />
             <datalist id="states"></datalist>
           </div>
+
           <div>
             <label for="year" class="block text-sm font-medium">Birth Year (optional)</label>
             <input id="year" name="year" type="number" min="1900" max="2100" step="1" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 1990" />
           </div>
+
           <div class="flex items-center gap-3 pt-2">
             <button id="submit-btn" type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 font-medium disabled:opacity-50">Run</button>
             <button id="reset-btn" type="button" class="rounded-xl border px-4 py-2">Reset</button>
             <button id="demo-btn" type="button" class="ml-auto text-sm underline">Try demo</button>
           </div>
+
           <div class="flex items-center gap-2 pt-2">
             <input id="use-mocks" type="checkbox" class="rounded" checked />
             <label for="use-mocks" class="text-sm">Use mock Python functions (uncheck after pasting your code)</label>
           </div>
         </form>
+
         <div class="mt-4 text-xs text-gray-600">
           <p><strong>Status:</strong> <span id="status-text">Loading Pyodide…</span></p>
           <p id="error-text" class="text-red-700 hidden"></p>
         </div>
+
         <details class="mt-4">
           <summary class="text-sm font-medium">How to add your Python functions</summary>
           <ol class="list-decimal list-inside text-sm mt-2 space-y-1">
@@ -60,6 +73,8 @@
         </details>
       </div>
     </section>
+
+    <!-- Results Area -->
     <section class="lg:col-span-2">
       <div class="bg-white rounded-2xl shadow p-5" role="region" aria-live="polite" aria-atomic="true">
         <h2 class="text-lg font-semibold mb-2">Results</h2>
@@ -68,14 +83,304 @@
           <p id="summary-subtitle" class="text-gray-600"></p>
           <ul id="summary-bullets" class="list-disc list-inside mt-2 space-y-1"></ul>
         </div>
+
         <div id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+
         <div id="charts" class="space-y-6">
           <canvas id="chart1" height="140" class="w-full"></canvas>
           <canvas id="chart2" height="140" class="w-full"></canvas>
         </div>
+
         <p id="footnote" class="text-xs text-gray-500 mt-6"></p>
       </div>
     </section>
   </main>
+
+  <!-- Inline JSON with US states for datalist (keeps single-file runnable) -->
+  <script type="application/json" id="states-json">[
+    "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"
+  ]</script>
+
+  <!-- === PYTHON: Your functions go here (or leave mocks on) === -->
+  <script type="text/x-python" id="user-python">
+# Paste your real functions here. They should return the shapes documented below.
+# If your signatures differ, create thin wrappers with the expected names.
+
+# Expected return shapes:
+# summarize_user(name:str, state:Optional[str]=None, year:Optional[int]=None) -> {
+#   'title': str, 'subtitle': str, 'bullets': list[str]
+# }
+# get_visualization_data(state:Optional[str]=None, year:Optional[int]=None) -> {
+#   'series': [ { 'id': 'chart1'|'chart2', 'type': 'bar'|'line'|'pie', 'labels': list, 'values': list, 'title': str, 'yLabel': str } ],
+#   'schema': { 'notes': str, 'source': str }
+# }
+# get_quick_stats(state:Optional[str]=None, year:Optional[int]=None) -> {
+#   'cards': [ { 'label': str, 'value': Any } ]
+# }
+
+# --- Example wrappers (delete when pasting real code) ---
+# def summarize_user(name, state=None, year=None):
+#     ...
+# def get_visualization_data(state=None, year=None):
+#     ...
+# def get_quick_stats(state=None, year=None):
+#     ...
+  </script>
+
+  <!-- === PYTHON: Mock implementations (used when checkbox is ON) === -->
+  <script type="text/x-python" id="mock-python">
+from typing import Optional
+
+def summarize_user(name: str, state: Optional[str] = None, year: Optional[int] = None):
+    return {
+        'title': f"Hello, {name}!",
+        'subtitle': "Here’s a quick snapshot based on what you shared.",
+        'bullets': [
+            f"Birth state: {state or '—'}",
+            f"Birth year: {year or '—'}",
+            "(Mock data) Replace with your Colab functions."
+        ]
+    }
+
+def get_visualization_data(state: Optional[str] = None, year: Optional[int] = None):
+    labels = ["A","B","C","D"]
+    return {
+        'series': [
+            { 'id': 'chart1', 'type': 'bar', 'labels': labels, 'values': [3,7,5,2], 'title': 'Example Bar', 'yLabel': 'Units' },
+            { 'id': 'chart2', 'type': 'line','labels': labels, 'values': [2,4,6,4], 'title': 'Example Line','yLabel': 'Score' }
+        ],
+        'schema': { 'notes': 'Mock dataset', 'source': 'Local' }
+    }
+
+def get_quick_stats(state: Optional[str] = None, year: Optional[int] = None):
+    return {
+        'cards': [
+            { 'label': 'Inputs Seen', 'value': 'OK' },
+            { 'label': 'Records', 'value': 4 },
+            { 'label': 'Score', 'value': 87 },
+            { 'label': 'State Provided', 'value': bool(state) }
+        ]
+    }
+  </script>
+
+  <!-- === APP SCRIPT === -->
+  <script>
+    /**
+     * App state
+     */
+    let pyodide = null;
+    let charts = {};
+
+    const el = (id) => document.getElementById(id);
+
+    /** Sanitize a simple text input (strip tags) */
+    function sanitize(str) {
+      return (str || '').replace(/<[^>]*>/g, '').trim();
+    }
+
+    /** Load states into datalist */
+    function loadStates() {
+      try {
+        const states = JSON.parse(el('states-json').textContent);
+        const datalist = el('states');
+        datalist.innerHTML = states.map(s => `<option value="${s}"></option>`).join('');
+      } catch (e) {
+        console.warn('Failed to load states list', e);
+      }
+    }
+
+    /** Initialize Pyodide and preload mock code */
+    async function initPyodide() {
+      try {
+        el('status-text').textContent = 'Loading Pyodide…';
+        pyodide = await loadPyodide({ stdout: () => {}, stderr: (m) => console.warn(m) });
+        el('status-text').textContent = 'Pyodide loaded';
+        // Load mocks initially; real code will be loaded on demand if checkbox off
+        await pyodide.runPythonAsync(el('mock-python').textContent);
+      } catch (err) {
+        el('status-text').textContent = 'Pyodide failed to load';
+        el('error-text').textContent = String(err);
+        el('error-text').classList.remove('hidden');
+        throw err;
+      }
+    }
+
+    /** Replace functions with user-provided Python */
+    async function loadUserPython() {
+      const code = el('user-python').textContent.trim();
+      if (!code) return; // nothing to load
+      // Create a temporary module namespace so repeated runs overwrite cleanly
+      const wrapped = `\n# === User Code Start ===\n` + code + `\n# === User Code End ===`;
+      await pyodide.runPythonAsync(wrapped);
+    }
+
+    /** Fetch callable references from Python */
+    function getPyFns() {
+      const g = pyodide.globals;
+      return {
+        summarize_user: g.get('summarize_user'),
+        get_visualization_data: g.get('get_visualization_data'),
+        get_quick_stats: g.get('get_quick_stats')
+      };
+    }
+
+    /** Render helpers */
+    function renderSummary(data) {
+      el('summary-title').textContent = data?.title || '';
+      el('summary-subtitle').textContent = data?.subtitle || '';
+      const ul = el('summary-bullets');
+      ul.innerHTML = '';
+      (data?.bullets || []).forEach(b => {
+        const li = document.createElement('li');
+        li.textContent = String(b);
+        ul.appendChild(li);
+      });
+    }
+
+    function renderKPIs(stats) {
+      const container = el('kpis');
+      container.innerHTML = '';
+      const cards = stats?.cards || [];
+      cards.slice(0, 4).forEach(({ label, value }) => {
+        const div = document.createElement('div');
+        div.className = 'rounded-xl border p-3 text-center';
+        const l = document.createElement('div');
+        l.className = 'text-xs text-gray-500';
+        l.textContent = label;
+        const v = document.createElement('div');
+        v.className = 'text-xl font-semibold';
+        v.textContent = String(value);
+        div.append(l, v);
+        container.appendChild(div);
+      });
+    }
+
+    function destroyChart(id) {
+      if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    }
+
+    function renderCharts(viz) {
+      const series = viz?.series || [];
+      const canvases = ['chart1', 'chart2'];
+      // Clear/destroy existing
+      canvases.forEach(destroyChart);
+      canvases.forEach(id => {
+        // Clear canvas for screen readers
+        const c = el(id);
+        const ctx = c.getContext('2d');
+        ctx.clearRect(0, 0, c.width, c.height);
+      });
+      // Render up to two
+      series.slice(0, 2).forEach((s, i) => {
+        const id = canvases[i];
+        const ctx = el(id).getContext('2d');
+        charts[id] = new Chart(ctx, {
+          type: s.type || 'bar',
+          data: {
+            labels: s.labels || [],
+            datasets: [{ label: s.yLabel || 'Value', data: s.values || [] }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: true }, title: { display: !!s.title, text: s.title || '' } },
+            scales: (s.type === 'pie') ? {} : { y: { beginAtZero: true } }
+          }
+        });
+      });
+      const note = viz?.schema?.notes || '';
+      const src = viz?.schema?.source || '';
+      el('footnote').textContent = [note, src && `Source: ${src}`].filter(Boolean).join(' — ');
+    }
+
+    /** Main submit handler */
+    async function onSubmit(e) {
+      e.preventDefault();
+      el('error-text').classList.add('hidden');
+
+      // Validate inputs
+      const name = sanitize(el('name').value);
+      if (!name) {
+        el('name').focus();
+        return;
+      }
+      let state = sanitize(el('state').value);
+      const yearVal = sanitize(el('year').value);
+      const year = yearVal ? parseInt(yearVal, 10) : null;
+      if (Number.isNaN(year)) {
+        el('error-text').textContent = 'Year must be a valid integer.';
+        el('error-text').classList.remove('hidden');
+        return;
+      }
+
+      el('submit-btn').disabled = true;
+      el('status-text').textContent = 'Running Python…';
+
+      try {
+        // Load appropriate code into Python
+        if (el('use-mocks').checked) {
+          await pyodide.runPythonAsync(el('mock-python').textContent);
+        } else {
+          // Ensure user code present; if empty, warn
+          await pyodide.runPythonAsync(el('mock-python').textContent); // provide baseline in case user code only defines a subset
+          await loadUserPython();
+        }
+
+        const { summarize_user, get_visualization_data, get_quick_stats } = getPyFns();
+
+        // Call Python functions and convert to JS
+        const pyKw = { state: state || null, year: year ?? null };
+        const sumRes = summarize_user.callKwargs(null, { name, ...pyKw }).toJs({ dict_hook: Object });
+        const kpiRes = get_quick_stats.callKwargs(null, pyKw).toJs({ dict_hook: Object });
+        const vizRes = get_visualization_data.callKwargs(null, pyKw).toJs({ dict_hook: Object });
+
+        renderSummary(sumRes);
+        renderKPIs(kpiRes);
+        renderCharts(vizRes);
+        el('status-text').textContent = 'Done';
+      } catch (err) {
+        console.error(err);
+        el('status-text').textContent = 'Error';
+        el('error-text').textContent = String(err);
+        el('error-text').classList.remove('hidden');
+      } finally {
+        el('submit-btn').disabled = false;
+      }
+    }
+
+    /** Reset handler */
+    function onReset() {
+      el('user-form').reset();
+      ['summary-title','summary-subtitle','footnote'].forEach(id => el(id).textContent = '');
+      el('summary-bullets').innerHTML = '';
+      el('kpis').innerHTML = '';
+      ['chart1','chart2'].forEach(destroyChart);
+      el('status-text').textContent = 'Ready';
+      el('error-text').classList.add('hidden');
+    }
+
+    /** Demo prefill */
+    async function onDemo() {
+      el('name').value = 'Alex';
+      el('state').value = 'Nebraska';
+      el('year').value = '1990';
+      // Trigger submit
+      const evt = new Event('submit', { cancelable: true });
+      el('user-form').dispatchEvent(evt);
+    }
+
+    // Wire up
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadStates();
+      await initPyodide();
+      el('status-text').textContent = 'Ready';
+      el('user-form').addEventListener('submit', onSubmit);
+      el('reset-btn').addEventListener('click', onReset);
+      el('demo-btn').addEventListener('click', onDemo);
+      // Disable submit until name is non-empty
+      const toggleSubmit = () => { el('submit-btn').disabled = !sanitize(el('name').value); };
+      el('name').addEventListener('input', toggleSubmit);
+      toggleSubmit();
+    });
+  </script>
 </body>
 </html>

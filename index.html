@@ -112,28 +112,19 @@
 <script>
   const PY_CODE = `
 # ===================== PASTE YOUR PYTHON FUNCTIONS HERE =====================
-# Minimal example that fetches your CSV from GitHub, matches on name & year,
-# and returns a simple English sentence + an optional bar chart.
-# Works entirely in the browser via Pyodide (no server needed).
-
 from pyodide.http import open_url
 import io, csv, json, sys
 
-# Prefer the canonical raw URL and fall back to the originally provided one
+# Updated data source URL
 URL_CANDIDATES = [
-    "https://raw.githubusercontent.com/jeromeroehmdoane/names/main/small_demo.csv",  # canonical
-    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo.csv"  # provided
+    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo%20(1).csv"
 ]
 
 def _read_name_data(url: str):
-    """Read CSV from URL and yield normalized rows {name:str, year:int, count:int}.
-    Returns (rows, meta) where meta has: url, rows_parsed, header, sample_rows.
-    """
     text = open_url(url).read()
     rdr = csv.DictReader(io.StringIO(text))
     rows = [row for row in rdr]
 
-    # Helper: get with fallbacks
     def g(r, *keys, default=""):
         for k in keys:
             if k in r and r[k] is not None:
@@ -144,7 +135,7 @@ def _read_name_data(url: str):
     for r in rows:
         name = g(r, 'name','Name').strip()
         yraw = g(r, 'year','Year').strip()
-        craw = g(r, 'frequency','Frequency','freq','Freq','count','Count','n','N','Number','births','Births','value','Value').strip()
+        craw = g(r, 'frequency','Frequency','freq','Freq').strip()
         if not name:
             continue
         try:
@@ -169,23 +160,16 @@ def _read_name_data(url: str):
 
 
 def compute_visuals(name, state=None, year=None):
-    """
-    Match user-provided name/year to counts from the CSV. If year omitted, report
-    totals and peak. Also expose lightweight diagnostics so you can verify that
-    the dataset loaded correctly from GitHub Raw.
-    """
     q_name = (name or '').strip()
     if not q_name:
         return {"summary": "Please provide a name.", "charts": [], "debug": {"note": "missing name"}}
 
-    # Normalize for case-insensitive matching
     q_lower = q_name.lower()
     try:
         q_year = int(year) if year is not None and str(year).strip() else None
     except Exception:
         q_year = None
 
-    # Try candidate URLs until one parses nonzero rows
     last_meta = {}
     data = []
     for U in URL_CANDIDATES:
@@ -198,7 +182,6 @@ def compute_visuals(name, state=None, year=None):
             last_meta = {"url": U, "error": str(e)}
             data = []
 
-    # Build series for the given name
     series = {}
     for r in data:
         if r['name'].lower() == q_lower:
@@ -216,7 +199,6 @@ def compute_visuals(name, state=None, year=None):
     if q_year is not None:
         c = int(series.get(q_year, 0))
         msg = f"You were one of {c} {q_name}'s born in {q_year}."
-        # Include ALL available years for this name in the dataset (no windowing)
         years_sorted = sorted(series.keys())
         x = years_sorted
         y = [int(series[y]) for y in x]
@@ -235,142 +217,6 @@ def compute_visuals(name, state=None, year=None):
         return {"summary": msg, "charts": charts, "debug": last_meta}
 # ===================== END USER PYTHON SECTION ==============================
 `;
-
-  const status = document.getElementById('status');
-  const codeView = document.getElementById('codeView');
-  codeView.textContent = PY_CODE;
-
-  let pyodide = null;
-  let pyReady = (async () => {
-    try {
-      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
-      status.innerHTML = 'Python runtime: <span class="ok">ready</span>';
-      return true;
-    } catch (err) {
-      status.innerHTML = 'Python runtime: <span class="err">failed to load</span>';
-      console.error(err);
-      return false;
-    }
-  })();
-
-  const elName = document.getElementById('name');
-  const elState = document.getElementById('state');
-  const elYear = document.getElementById('year');
-  const runBtn = document.getElementById('runBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const chartsDiv = document.getElementById('charts');
-  const summaryDiv = document.getElementById('summary');
-
-  function clearOutputs(){
-    chartsDiv.innerHTML = '';
-    summaryDiv.textContent = '(Your summary will appear here.)';
-  }
-
-  resetBtn.addEventListener('click', () => {
-    elName.value = '';
-    elState.value = '';
-    elYear.value = '';
-    clearOutputs();
-  });
-
-  // Quick tests
-  const btnTest1 = document.getElementById('testJerome1993');
-  const btnTest2 = document.getElementById('testAdaNone');
-  function runQuickTest(nm, yr){
-    elName.value = nm; elYear.value = yr ?? ''; elState.value = '';
-    runBtn.click();
-  }
-  if (btnTest1) btnTest1.addEventListener('click', () => runQuickTest('Jerome', '1993'));
-  if (btnTest2) btnTest2.addEventListener('click', () => runQuickTest('Ada', ''));
-
-  runBtn.addEventListener('click', async () => {
-    clearOutputs();
-    if(!elName.value.trim()){
-      alert('Please enter a name.');
-      elName.focus();
-      return;
-    }
-    runBtn.disabled = true;
-    runBtn.textContent = 'Running…';
-
-    try{
-      const ok = await pyReady;
-      if(!ok) throw new Error('Pyodide not ready');
-
-      await pyodide.runPythonAsync(PY_CODE);
-
-      pyodide.globals.set('name_js', elName.value);
-      pyodide.globals.set('state_js', elState.value);
-      pyodide.globals.set('year_js', elYear.value);
-
-      const outJson = await pyodide.runPythonAsync(`
-import json
-name = (name_js or '').strip()
-state = (state_js or '').strip() or None
-try:
-    year = int(year_js) if str(year_js).strip() else None
-except Exception:
-    year = None
-res = compute_visuals(name=name, state=state, year=year)
-json.dumps(res)
-`);
-
-      const result = JSON.parse(outJson);
-      renderSummary(result.summary);
-      // Show lightweight diagnostics if available
-      if (result.debug) {
-        const diag = document.createElement('div');
-        diag.className = 'muted';
-        diag.style.marginTop = '8px';
-        diag.textContent = `Data source: ${result.debug.url || 'unknown'} | rows parsed: ${result.debug.rows_parsed || 0}`;
-        summaryDiv.appendChild(diag);
-      }
-      renderCharts(result.charts || []);
-
-    }catch(err){
-      console.error(err);
-      summaryDiv.innerHTML = `<span class="err">Error:</span> ${String(err)}`;
-    }finally{
-      runBtn.disabled = false;
-      runBtn.textContent = 'Run analysis';
-    }
-  });
-
-  // Rendering
-  function renderSummary(text){
-    summaryDiv.textContent = text || '(No summary returned)';
-  }
-
-  function renderCharts(charts){
-    const chartsRoot = document.getElementById('charts');
-    chartsRoot.innerHTML = '';
-    if(!Array.isArray(charts) || charts.length === 0){
-      const stub = document.createElement('div');
-      stub.className = 'muted';
-      stub.textContent = 'No charts returned. Your function should return a list under "charts".';
-      chartsRoot.appendChild(stub);
-      return;
-    }
-    charts.forEach((c, i) => {
-      const id = `plot_${i}`;
-      const holder = document.createElement('div');
-      holder.className = 'chart';
-      holder.id = id;
-      chartsRoot.appendChild(holder);
-
-      const trace = { type: 'scatter', mode: 'lines+markers', x: c.x || [], y: c.y || [] };
-      const layout = {
-        title: c.title || `Chart ${i+1}`,
-        margin: {l:48, r:20, t:48, b:48},
-        xaxis: { title: c.x_label || 'x' },
-        yaxis: { title: c.y_label || 'y' },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        font: {color: '#e7ecff'}
-      };
-      Plotly.newPlot(id, [trace], layout, {displayModeBar: true, responsive: true});
-    });
-  }
 </script>
 </body>
 </html>

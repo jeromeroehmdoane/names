@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Name & Birth Info — Demo with Pyodide + Chart.js</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+  <style>
+    :focus { outline: 2px solid #111827; outline-offset: 2px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-white px-3 py-2 rounded shadow">Skip to main content</a>
+  <header class="max-w-6xl mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold">Name & Birth Info — Interactive Summary</h1>
+    <p class="text-sm text-gray-600">Client‑side demo using Pyodide to run your Python functions. No server required.</p>
+  </header>
+  <main id="main" class="max-w-6xl mx-auto px-4 pb-16 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <section class="lg:col-span-1">
+      <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="text-lg font-semibold mb-4">Your Info</h2>
+        <form id="user-form" class="space-y-4" novalidate>
+          <div>
+            <label for="name" class="block text-sm font-medium">Name <span class="text-red-600">*</span></label>
+            <input id="name" name="name" type="text" required maxlength="80" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., Alex" />
+            <p id="name-help" class="text-xs text-gray-500 mt-1">Required — we’ll greet you by this name.</p>
+          </div>
+          <div>
+            <label for="state" class="block text-sm font-medium">Birth State (optional)</label>
+            <input id="state" name="state" list="states" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., Nebraska" />
+            <datalist id="states"></datalist>
+          </div>
+          <div>
+            <label for="year" class="block text-sm font-medium">Birth Year (optional)</label>
+            <input id="year" name="year" type="number" min="1900" max="2100" step="1" class="mt-1 w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 1990" />
+          </div>
+          <div class="flex items-center gap-3 pt-2">
+            <button id="submit-btn" type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 font-medium disabled:opacity-50">Run</button>
+            <button id="reset-btn" type="button" class="rounded-xl border px-4 py-2">Reset</button>
+            <button id="demo-btn" type="button" class="ml-auto text-sm underline">Try demo</button>
+          </div>
+          <div class="flex items-center gap-2 pt-2">
+            <input id="use-mocks" type="checkbox" class="rounded" checked />
+            <label for="use-mocks" class="text-sm">Use mock Python functions (uncheck after pasting your code)</label>
+          </div>
+        </form>
+        <div class="mt-4 text-xs text-gray-600">
+          <p><strong>Status:</strong> <span id="status-text">Loading Pyodide…</span></p>
+          <p id="error-text" class="text-red-700 hidden"></p>
+        </div>
+        <details class="mt-4">
+          <summary class="text-sm font-medium">How to add your Python functions</summary>
+          <ol class="list-decimal list-inside text-sm mt-2 space-y-1">
+            <li>Paste your functions into the Python block below where indicated.</li>
+            <li>Uncheck “Use mock Python functions”.</li>
+            <li>Click <em>Run</em>.</li>
+          </ol>
+        </details>
+      </div>
+    </section>
+    <section class="lg:col-span-2">
+      <div class="bg-white rounded-2xl shadow p-5" role="region" aria-live="polite" aria-atomic="true">
+        <h2 class="text-lg font-semibold mb-2">Results</h2>
+        <div id="summary" class="mb-4">
+          <h3 id="summary-title" class="text-xl font-semibold"></h3>
+          <p id="summary-subtitle" class="text-gray-600"></p>
+          <ul id="summary-bullets" class="list-disc list-inside mt-2 space-y-1"></ul>
+        </div>
+        <div id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+        <div id="charts" class="space-y-6">
+          <canvas id="chart1" height="140" class="w-full"></canvas>
+          <canvas id="chart2" height="140" class="w-full"></canvas>
+        </div>
+        <p id="footnote" class="text-xs text-gray-500 mt-6"></p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

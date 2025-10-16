@@ -112,19 +112,28 @@
 <script>
   const PY_CODE = `
 # ===================== PASTE YOUR PYTHON FUNCTIONS HERE =====================
+# Minimal example that fetches your CSV from GitHub, matches on name & year,
+# and returns a simple English sentence + an optional bar chart.
+# Works entirely in the browser via Pyodide (no server needed).
+
 from pyodide.http import open_url
 import io, csv, json, sys
 
-# Updated data source URL
+# Prefer the canonical raw URL and fall back to the originally provided one
 URL_CANDIDATES = [
-    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo%20(1).csv"
+    "https://raw.githubusercontent.com/jeromeroehmdoane/names/main/small_demo.csv",  # canonical
+    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo.csv"  # provided
 ]
 
 def _read_name_data(url: str):
+    """Read CSV from URL and yield normalized rows {name:str, year:int, count:int}.
+    Returns (rows, meta) where meta has: url, rows_parsed, header, sample_rows.
+    """
     text = open_url(url).read()
     rdr = csv.DictReader(io.StringIO(text))
     rows = [row for row in rdr]
 
+    # Helper: get with fallbacks
     def g(r, *keys, default=""):
         for k in keys:
             if k in r and r[k] is not None:
@@ -135,7 +144,7 @@ def _read_name_data(url: str):
     for r in rows:
         name = g(r, 'name','Name').strip()
         yraw = g(r, 'year','Year').strip()
-        craw = g(r, 'frequency','Frequency','freq','Freq').strip()
+        craw = g(r, 'frequency','Frequency','freq','Freq','count','Count','n','N','Number','births','Births','value','Value').strip()
         if not name:
             continue
         try:
@@ -160,16 +169,23 @@ def _read_name_data(url: str):
 
 
 def compute_visuals(name, state=None, year=None):
+    """
+    Match user-provided name/year to counts from the CSV. If year omitted, report
+    totals and peak. Also expose lightweight diagnostics so you can verify that
+    the dataset loaded correctly from GitHub Raw.
+    """
     q_name = (name or '').strip()
     if not q_name:
         return {"summary": "Please provide a name.", "charts": [], "debug": {"note": "missing name"}}
 
+    # Normalize for case-insensitive matching
     q_lower = q_name.lower()
     try:
         q_year = int(year) if year is not None and str(year).strip() else None
     except Exception:
         q_year = None
 
+    # Try candidate URLs until one parses nonzero rows
     last_meta = {}
     data = []
     for U in URL_CANDIDATES:
@@ -182,6 +198,7 @@ def compute_visuals(name, state=None, year=None):
             last_meta = {"url": U, "error": str(e)}
             data = []
 
+    # Build series for the given name
     series = {}
     for r in data:
         if r['name'].lower() == q_lower:
@@ -199,6 +216,7 @@ def compute_visuals(name, state=None, year=None):
     if q_year is not None:
         c = int(series.get(q_year, 0))
         msg = f"You were one of {c} {q_name}'s born in {q_year}."
+        # Include ALL available years for this name in the dataset (no windowing)
         years_sorted = sorted(series.keys())
         x = years_sorted
         y = [int(series[y]) for y in x]
@@ -218,20 +236,19 @@ def compute_visuals(name, state=None, year=None):
 # ===================== END USER PYTHON SECTION ==============================
 `;
 
-  // ---- JS Runner & UI wiring (restored) ----
   const status = document.getElementById('status');
   const codeView = document.getElementById('codeView');
-  if (codeView) codeView.textContent = PY_CODE;
+  codeView.textContent = PY_CODE;
 
   let pyodide = null;
   let pyReady = (async () => {
     try {
       pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
-      if (status) status.innerHTML = 'Python runtime: <span class="ok">ready</span>';
+      status.innerHTML = 'Python runtime: <span class="ok">ready</span>';
       return true;
     } catch (err) {
-      if (status) status.innerHTML = 'Python runtime: <span class="err">failed to load</span>';
-      console.error('Pyodide load error:', err);
+      status.innerHTML = 'Python runtime: <span class="err">failed to load</span>';
+      console.error(err);
       return false;
     }
   })();
@@ -245,36 +262,32 @@ def compute_visuals(name, state=None, year=None):
   const summaryDiv = document.getElementById('summary');
 
   function clearOutputs(){
-    if (chartsDiv) chartsDiv.innerHTML = '';
-    if (summaryDiv) summaryDiv.textContent = '(Your summary will appear here.)';
+    chartsDiv.innerHTML = '';
+    summaryDiv.textContent = '(Your summary will appear here.)';
   }
 
-  if (resetBtn) resetBtn.addEventListener('click', () => {
-    if (elName) elName.value = '';
-    if (elState) elState.value = '';
-    if (elYear) elYear.value = '';
+  resetBtn.addEventListener('click', () => {
+    elName.value = '';
+    elState.value = '';
+    elYear.value = '';
     clearOutputs();
   });
 
   // Quick tests
   const btnTest1 = document.getElementById('testJerome1993');
   const btnTest2 = document.getElementById('testAdaNone');
-  const btnTest3 = document.getElementById('testLowerJerome1993');
   function runQuickTest(nm, yr){
-    if (elName) elName.value = nm;
-    if (elYear) elYear.value = yr ?? '';
-    if (elState) elState.value = '';
-    if (runBtn) runBtn.click();
+    elName.value = nm; elYear.value = yr ?? ''; elState.value = '';
+    runBtn.click();
   }
   if (btnTest1) btnTest1.addEventListener('click', () => runQuickTest('Jerome', '1993'));
   if (btnTest2) btnTest2.addEventListener('click', () => runQuickTest('Ada', ''));
-  if (btnTest3) btnTest3.addEventListener('click', () => runQuickTest('jerome', '1993'));
 
-  if (runBtn) runBtn.addEventListener('click', async () => {
+  runBtn.addEventListener('click', async () => {
     clearOutputs();
-    if(!elName || !elName.value.trim()){
+    if(!elName.value.trim()){
       alert('Please enter a name.');
-      if (elName) elName.focus();
+      elName.focus();
       return;
     }
     runBtn.disabled = true;
@@ -287,8 +300,8 @@ def compute_visuals(name, state=None, year=None):
       await pyodide.runPythonAsync(PY_CODE);
 
       pyodide.globals.set('name_js', elName.value);
-      pyodide.globals.set('state_js', elState ? elState.value : '');
-      pyodide.globals.set('year_js', elYear ? elYear.value : '');
+      pyodide.globals.set('state_js', elState.value);
+      pyodide.globals.set('year_js', elYear.value);
 
       const outJson = await pyodide.runPythonAsync(`
 import json
@@ -304,6 +317,7 @@ json.dumps(res)
 
       const result = JSON.parse(outJson);
       renderSummary(result.summary);
+      // Show lightweight diagnostics if available
       if (result.debug) {
         const diag = document.createElement('div');
         diag.className = 'muted';
@@ -315,21 +329,20 @@ json.dumps(res)
 
     }catch(err){
       console.error(err);
-      if (summaryDiv) summaryDiv.innerHTML = `<span class="err">Error:</span> ${String(err)}`;
+      summaryDiv.innerHTML = `<span class="err">Error:</span> ${String(err)}`;
     }finally{
       runBtn.disabled = false;
       runBtn.textContent = 'Run analysis';
     }
   });
 
+  // Rendering
   function renderSummary(text){
-    if (!summaryDiv) return;
     summaryDiv.textContent = text || '(No summary returned)';
   }
 
   function renderCharts(charts){
-    const chartsRoot = chartsDiv;
-    if (!chartsRoot) return;
+    const chartsRoot = document.getElementById('charts');
     chartsRoot.innerHTML = '';
     if(!Array.isArray(charts) || charts.length === 0){
       const stub = document.createElement('div');

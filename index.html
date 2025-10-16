@@ -117,7 +117,7 @@ import io, csv, json, sys
 
 # Updated data source URL
 URL_CANDIDATES = [
-    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo.csv"
+    "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/small_demo%20(1).csv"
 ]
 
 def _read_name_data(url: str):
@@ -217,6 +217,147 @@ def compute_visuals(name, state=None, year=None):
         return {"summary": msg, "charts": charts, "debug": last_meta}
 # ===================== END USER PYTHON SECTION ==============================
 `;
+
+  // ---- JS Runner & UI wiring (restored) ----
+  const status = document.getElementById('status');
+  const codeView = document.getElementById('codeView');
+  if (codeView) codeView.textContent = PY_CODE;
+
+  let pyodide = null;
+  let pyReady = (async () => {
+    try {
+      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+      if (status) status.innerHTML = 'Python runtime: <span class="ok">ready</span>';
+      return true;
+    } catch (err) {
+      if (status) status.innerHTML = 'Python runtime: <span class="err">failed to load</span>';
+      console.error('Pyodide load error:', err);
+      return false;
+    }
+  })();
+
+  const elName = document.getElementById('name');
+  const elState = document.getElementById('state');
+  const elYear = document.getElementById('year');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const chartsDiv = document.getElementById('charts');
+  const summaryDiv = document.getElementById('summary');
+
+  function clearOutputs(){
+    if (chartsDiv) chartsDiv.innerHTML = '';
+    if (summaryDiv) summaryDiv.textContent = '(Your summary will appear here.)';
+  }
+
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    if (elName) elName.value = '';
+    if (elState) elState.value = '';
+    if (elYear) elYear.value = '';
+    clearOutputs();
+  });
+
+  // Quick tests
+  const btnTest1 = document.getElementById('testJerome1993');
+  const btnTest2 = document.getElementById('testAdaNone');
+  const btnTest3 = document.getElementById('testLowerJerome1993');
+  function runQuickTest(nm, yr){
+    if (elName) elName.value = nm;
+    if (elYear) elYear.value = yr ?? '';
+    if (elState) elState.value = '';
+    if (runBtn) runBtn.click();
+  }
+  if (btnTest1) btnTest1.addEventListener('click', () => runQuickTest('Jerome', '1993'));
+  if (btnTest2) btnTest2.addEventListener('click', () => runQuickTest('Ada', ''));
+  if (btnTest3) btnTest3.addEventListener('click', () => runQuickTest('jerome', '1993'));
+
+  if (runBtn) runBtn.addEventListener('click', async () => {
+    clearOutputs();
+    if(!elName || !elName.value.trim()){
+      alert('Please enter a name.');
+      if (elName) elName.focus();
+      return;
+    }
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+
+    try{
+      const ok = await pyReady;
+      if(!ok) throw new Error('Pyodide not ready');
+
+      await pyodide.runPythonAsync(PY_CODE);
+
+      pyodide.globals.set('name_js', elName.value);
+      pyodide.globals.set('state_js', elState ? elState.value : '');
+      pyodide.globals.set('year_js', elYear ? elYear.value : '');
+
+      const outJson = await pyodide.runPythonAsync(`
+import json
+name = (name_js or '').strip()
+state = (state_js or '').strip() or None
+try:
+    year = int(year_js) if str(year_js).strip() else None
+except Exception:
+    year = None
+res = compute_visuals(name=name, state=state, year=year)
+json.dumps(res)
+`);
+
+      const result = JSON.parse(outJson);
+      renderSummary(result.summary);
+      if (result.debug) {
+        const diag = document.createElement('div');
+        diag.className = 'muted';
+        diag.style.marginTop = '8px';
+        diag.textContent = `Data source: ${result.debug.url || 'unknown'} | rows parsed: ${result.debug.rows_parsed || 0}`;
+        summaryDiv.appendChild(diag);
+      }
+      renderCharts(result.charts || []);
+
+    }catch(err){
+      console.error(err);
+      if (summaryDiv) summaryDiv.innerHTML = `<span class="err">Error:</span> ${String(err)}`;
+    }finally{
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run analysis';
+    }
+  });
+
+  function renderSummary(text){
+    if (!summaryDiv) return;
+    summaryDiv.textContent = text || '(No summary returned)';
+  }
+
+  function renderCharts(charts){
+    const chartsRoot = chartsDiv;
+    if (!chartsRoot) return;
+    chartsRoot.innerHTML = '';
+    if(!Array.isArray(charts) || charts.length === 0){
+      const stub = document.createElement('div');
+      stub.className = 'muted';
+      stub.textContent = 'No charts returned. Your function should return a list under "charts".';
+      chartsRoot.appendChild(stub);
+      return;
+    }
+    charts.forEach((c, i) => {
+      const id = `plot_${i}`;
+      const holder = document.createElement('div');
+      holder.className = 'chart';
+      holder.id = id;
+      chartsRoot.appendChild(holder);
+
+      const trace = { type: 'scatter', mode: 'lines+markers', x: c.x || [], y: c.y || [] };
+      const layout = {
+        title: c.title || `Chart ${i+1}`,
+        margin: {l:48, r:20, t:48, b:48},
+        xaxis: { title: c.x_label || 'x' },
+        yaxis: { title: c.y_label || 'y' },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: {color: '#e7ecff'}
+      };
+      Plotly.newPlot(id, [trace], layout, {displayModeBar: true, responsive: true});
+    });
+  }
 </script>
 </body>
 </html>

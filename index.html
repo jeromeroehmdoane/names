@@ -208,8 +208,8 @@ def compute_visuals(name, state=None, year=None):
         total = int(sum(series.values()))
         peak_year = max(series, key=lambda y: series[y])
         peak_count = int(series[peak_year])
-        msg = (f"We found {total} occurrences of the name {q_name} across all years. "
-               f"Peak popularity in {peak_year} with {peak_count} births.")
+        msg = (f"We found {total} occurrences of the name {q_name} across all years."
+               f"Peak popularity was in {peak_year} with {peak_count} births.")
         years_sorted = sorted(series.keys())
         x = years_sorted
         y = [int(series[y]) for y in x]

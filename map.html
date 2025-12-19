@@ -74,12 +74,12 @@ const ALL_STATES = [
 // Combined-only metric: female_share = F / (M+F)
 const FEMALE_SHARE_METRIC = "female_share";
 
-// Diverging scale for Sex Balance: set 0.50 to #ebebeb (instead of white)
+// Diverging scale for Sex Balance: 0.50 is #ebebeb
 const FEMALE_SHARE_SCALE = [
   [0.00, "#295da6"],
   [0.15, "#60a5fa"],
   [0.40, "#bfdbfe"],
-  [0.50, "#ebebeb"],  // UPDATED neutral
+  [0.50, "#ebebeb"],
   [0.60, "#fbcfe8"],
   [0.85, "#f472b6"],
   [1.00, "#d13b6a"]
@@ -137,7 +137,7 @@ function updateMetricOptions(){
     if(!has){
       const opt = document.createElement("option");
       opt.value = FEMALE_SHARE_METRIC;
-      opt.textContent = "Sex Balance"; // UPDATED label
+      opt.textContent = "Sex Balance";
       metricSelect.appendChild(opt);
     }
   } else {
@@ -159,9 +159,10 @@ function formatHover(metric){
   }
   if(metric === FEMALE_SHARE_METRIC){
     // customdata: [State, share, female_freq, male_freq]
+    // share is forced to 0.5 when denom=0 or missing, per requirement
     return (
       "State: %{customdata[0]}" +
-      "<br>% Female: %{customdata[1]:.1%}" +
+      "<br>Sex Balance (Female %): %{customdata[1]:.1%}" +
       "<br>Female freq: %{customdata[2]:,.0f}" +
       "<br>Male freq: %{customdata[3]:,.0f}" +
       "<extra></extra>"
@@ -237,6 +238,7 @@ function getMetricValue(row, sexChoice, metric){
 }
 
 // ---------- Build Combined-only Sex Balance rows ----------
+// Requirement: If male_freq + female_freq = 0, force share=0.5 AND treat it as valid (colored, labeled 50%)
 function buildFemaleShareRows(baseRows){
   const map = new Map(); // key: year|state
   for(const r of baseRows){
@@ -254,7 +256,7 @@ function buildFemaleShareRows(baseRows){
   const out = [];
   for(const o of map.values()){
     const denom = o.male_freq + o.female_freq;
-    const share = (denom > 0) ? (o.female_freq / denom) : null;
+    const share = (denom > 0) ? (o.female_freq / denom) : 0.5; // UPDATED: force 50% when denom=0
     out.push({
       year: o.year,
       State: o.State,
@@ -266,16 +268,11 @@ function buildFemaleShareRows(baseRows){
   return out;
 }
 
-// ---------- p95 color max for all metrics; rank is log-scaled with darkest at best achieved rank ----------
+// ---------- Color axis ranges ----------
+// Requirement for Sex Balance: ALWAYS 0% to 100% (i.e., cmin=0, cmax=1), no p95 scaling.
 function computeColorAxisRangeP95(rows, sexChoice, metric){
   if(metric === FEMALE_SHARE_METRIC){
-    const vals = rows.map(r => r.female_share).filter(v => Number.isFinite(v));
-    if(vals.length === 0) return { cmin: 0, cmax: 1, cmid: 0.5 };
-
-    let cmax = percentile(vals, 95);
-    if(!Number.isFinite(cmax)) cmax = Math.max(...vals);
-    cmax = Math.min(1, Math.max(cmax, 1e-9));
-    return { cmin: 0, cmax, cmid: 0.5 };
+    return { cmin: 0, cmax: 1, cmid: 0.5 }; // UPDATED fixed range
   }
 
   const vals = rows
@@ -323,7 +320,7 @@ function makeYearStateLookupFemaleShare(rows){
   for(const r of rows){
     if(!byYear.has(r.year)) byYear.set(r.year, new Map());
     byYear.get(r.year).set(r.State, {
-      share: r.female_share,
+      share: r.female_share,         // always numeric (0.5 when denom=0)
       female_freq: r.female_freq,
       male_freq: r.male_freq
     });
@@ -401,10 +398,11 @@ function buildAnimatedChoropleth(rowsForFrames, rowsForRange, lookup, name, sexC
       for(const st of locations){
         if(m.has(st)){
           const obj = m.get(st);
-          const share = Number.isFinite(obj.share) ? obj.share : 0.5;
+          const share = Number.isFinite(obj.share) ? obj.share : 0.5; // defensive, but should be numeric
           z.push(share);
           customdata.push([st, share, obj.female_freq ?? 0, obj.male_freq ?? 0]);
         } else {
+          // Not present in lookup for this year -> treat as denom=0 -> 50%
           z.push(0.5);
           customdata.push([st, 0.5, 0, 0]);
         }
@@ -544,7 +542,7 @@ async function render(){
 
     if(sexChoice === "combined" && metric === FEMALE_SHARE_METRIC){
       rowsForFrames = buildFemaleShareRows(baseRows);
-      rowsForRange = rowsForFrames.filter(r => Number.isFinite(r.female_share));
+      rowsForRange = rowsForFrames; // range is fixed 0..1 anyway
       lookup = makeYearStateLookupFemaleShare(rowsForFrames);
     } else {
       if(sexChoice === "combined"){
@@ -604,4 +602,3 @@ updateMetricOptions();
 </script>
 </body>
 </html>
-

@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Name Popularity by State</title>
+
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#fafafa;color:#111;}
+    .wrap{max-width:1100px;margin:0 auto;padding:14px;}
+    h1{font-size:18px;margin:10px 0 12px;font-weight:650;}
+    .card{background:#fff;border:1px solid #e6e6e6;border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+    .controls{display:grid;grid-template-columns: 1fr auto auto auto;gap:10px;align-items:center;}
+    input, select{font-size:16px;padding:12px;border-radius:12px;border:1px solid #e6e6e6;background:#fff;}
+    button{font-size:16px;padding:12px 14px;border-radius:12px;border:none;background:#111;color:#fff;cursor:pointer;}
+    .status{margin-top:10px;font-size:13px;color:#555;min-height:18px;}
+    #plot{margin-top:12px;width:100%;height:72vh;min-height:520px;}
+    .hint{font-size:12px;color:#666;margin-top:6px;}
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <h1>Explore Name Popularity by State</h1>
+
+  <div class="card">
+    <div class="controls">
+      <input id="nameInput" placeholder="Enter a name (e.g., Taylor)" />
+
+      <select id="sexSelect" title="Sex">
+        <option value="combined" selected>Combined</option>
+        <option value="M">Male</option>
+        <option value="F">Female</option>
+      </select>
+
+      <select id="metricSelect" title="Metric">
+        <option value="frequency">Frequency</option>
+        <option value="percentage" selected>Percentage</option>
+        <option value="rank">Rank</option>
+        <!-- Sex Balance option is injected ONLY when Sex = Combined -->
+      </select>
+
+      <button id="goBtn">Show</button>
+    </div>
+
+    <div class="hint">Tip: Start with a name that you know exists in your state-by-state files.</div>
+    <div class="status" id="status"></div>
+    <div id="plot"></div>
+  </div>
+</div>
+
+<script>
+/**
+ * Expected CSV columns (case-sensitive):
+ *   name, year, sex, State,
+ *   frequency, percentage, rank,
+ *   overall_percentage, overall_rank
+ *
+ * Files: data_by_state_{first_letter}.csv
+ */
+const BASE = "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/";
+const STATUS = document.getElementById("status");
+
+// 50 states + DC
+const ALL_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME",
+  "MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI",
+  "SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"
+];
+
+// Combined-only metric: female_share = F / (M+F)
+const FEMALE_SHARE_METRIC = "female_share";
+
+// Diverging scale for Sex Balance: set 0.50 to #ebebeb (instead of white)
+const FEMALE_SHARE_SCALE = [
+  [0.00, "#295da6"],
+  [0.15, "#60a5fa"],
+  [0.40, "#bfdbfe"],
+  [0.50, "#ebebeb"],  // UPDATED neutral
+  [0.60, "#fbcfe8"],
+  [0.85, "#f472b6"],
+  [1.00, "#d13b6a"]
+];
+
+let cached = { letter: null, rows: null };
+
+function setStatus(msg){ STATUS.textContent = msg || ""; }
+function safeLower(s){ return (s || "").toString().trim().toLowerCase(); }
+
+function loadCSVForLetter(letter){
+  return new Promise((resolve, reject) => {
+    const url = `${BASE}data_by_state_${letter}.csv`;
+    Papa.parse(url, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: res => resolve(res.data),
+      error: err => reject(err)
+    });
+  });
+}
+
+function toNum(x){
+  const v = +x;
+  return Number.isFinite(v) ? v : null;
+}
+
+function percentile(arr, p){
+  const xs = arr.filter(v => Number.isFinite(v)).sort((a,b)=>a-b);
+  if(xs.length === 0) return null;
+  const idx = (p/100) * (xs.length - 1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if(lo === hi) return xs[lo];
+  const w = idx - lo;
+  return xs[lo]*(1-w) + xs[hi]*w;
+}
+
+function metricTitle(metric){
+  if(metric === "percentage") return "Percentage";
+  if(metric === "rank") return "Rank";
+  if(metric === FEMALE_SHARE_METRIC) return "Sex Balance";
+  return "Frequency";
+}
+
+// ---- Metric dropdown option injection (only when Sex=Combined) ----
+function updateMetricOptions(){
+  const sexChoice = document.getElementById("sexSelect").value;
+  const metricSelect = document.getElementById("metricSelect");
+  const current = metricSelect.value;
+
+  const has = Array.from(metricSelect.options).some(o => o.value === FEMALE_SHARE_METRIC);
+
+  if(sexChoice === "combined"){
+    if(!has){
+      const opt = document.createElement("option");
+      opt.value = FEMALE_SHARE_METRIC;
+      opt.textContent = "Sex Balance"; // UPDATED label
+      metricSelect.appendChild(opt);
+    }
+  } else {
+    for(const opt of Array.from(metricSelect.options)){
+      if(opt.value === FEMALE_SHARE_METRIC) metricSelect.removeChild(opt);
+    }
+    if(current === FEMALE_SHARE_METRIC){
+      metricSelect.value = "percentage";
+    }
+  }
+}
+
+function formatHover(metric){
+  if(metric === "percentage"){
+    return "State: %{customdata}<br>Percentage: %{z:.2f}%<extra></extra>";
+  }
+  if(metric === "rank"){
+    return "State: %{customdata[0]}<br>Rank: %{customdata[1]:.0f}<extra></extra>";
+  }
+  if(metric === FEMALE_SHARE_METRIC){
+    // customdata: [State, share, female_freq, male_freq]
+    return (
+      "State: %{customdata[0]}" +
+      "<br>% Female: %{customdata[1]:.1%}" +
+      "<br>Female freq: %{customdata[2]:,.0f}" +
+      "<br>Male freq: %{customdata[3]:,.0f}" +
+      "<extra></extra>"
+    );
+  }
+  return "State: %{customdata}<br>Frequency: %{z:,.0f}<extra></extra>";
+}
+
+function missingFill(metric){
+  // Frequency/Percentage -> 0; Rank -> 4000; Sex Balance -> 0.5 (neutral)
+  if(metric === FEMALE_SHARE_METRIC) return 0.5;
+  return (metric === "rank") ? 4000 : 0;
+}
+
+// ---------- Color endpoints (low fixed to #ebebeb; your preferred highs) ----------
+function sexHighColor(sexChoice){
+  if(sexChoice === "M") return "#0000A3";
+  if(sexChoice === "F") return "#ad028e";
+  return "#640191"; // combined
+}
+
+function colorscaleFor(sexChoice, metric){
+  if(metric === FEMALE_SHARE_METRIC){
+    return FEMALE_SHARE_SCALE;
+  }
+
+  const low = "#ebebeb";
+  const high = sexHighColor(sexChoice);
+
+  if(metric === "rank"){
+    return [[0, high], [1, low]];
+  }
+  return [[0, low], [1, high]];
+}
+
+// ---------- Combined construction ----------
+function buildCombined(rows){
+  const map = new Map();
+  for(const r of rows){
+    const key = `${r.year}|${r.State}`;
+    if(!map.has(key)){
+      map.set(key, {
+        name: r.name,
+        year: r.year,
+        State: r.State,
+        sex: "combined",
+        frequency: 0,
+        overall_percentage: r.overall_percentage,
+        overall_rank: r.overall_rank
+      });
+    }
+    const o = map.get(key);
+    if(Number.isFinite(r.frequency)) o.frequency += r.frequency;
+    if(!Number.isFinite(o.overall_percentage) && Number.isFinite(r.overall_percentage)) o.overall_percentage = r.overall_percentage;
+    if(!Number.isFinite(o.overall_rank) && Number.isFinite(r.overall_rank)) o.overall_rank = r.overall_rank;
+  }
+  return Array.from(map.values());
+}
+
+function getMetricValue(row, sexChoice, metric){
+  if(metric === FEMALE_SHARE_METRIC){
+    return row.female_share;
+  }
+
+  if(sexChoice === "combined"){
+    if(metric === "percentage") return row.overall_percentage;
+    if(metric === "rank") return row.overall_rank;
+    return row.frequency;
+  }
+  if(metric === "percentage") return row.percentage;
+  if(metric === "rank") return row.rank;
+  return row.frequency;
+}
+
+// ---------- Build Combined-only Sex Balance rows ----------
+function buildFemaleShareRows(baseRows){
+  const map = new Map(); // key: year|state
+  for(const r of baseRows){
+    const key = `${r.year}|${r.State}`;
+    if(!map.has(key)){
+      map.set(key, { year: r.year, State: r.State, male_freq: 0, female_freq: 0 });
+    }
+    const o = map.get(key);
+    if(Number.isFinite(r.frequency)){
+      if(r.sex === "M") o.male_freq += r.frequency;
+      if(r.sex === "F") o.female_freq += r.frequency;
+    }
+  }
+
+  const out = [];
+  for(const o of map.values()){
+    const denom = o.male_freq + o.female_freq;
+    const share = (denom > 0) ? (o.female_freq / denom) : null;
+    out.push({
+      year: o.year,
+      State: o.State,
+      female_share: share,
+      male_freq: o.male_freq,
+      female_freq: o.female_freq
+    });
+  }
+  return out;
+}
+
+// ---------- p95 color max for all metrics; rank is log-scaled with darkest at best achieved rank ----------
+function computeColorAxisRangeP95(rows, sexChoice, metric){
+  if(metric === FEMALE_SHARE_METRIC){
+    const vals = rows.map(r => r.female_share).filter(v => Number.isFinite(v));
+    if(vals.length === 0) return { cmin: 0, cmax: 1, cmid: 0.5 };
+
+    let cmax = percentile(vals, 95);
+    if(!Number.isFinite(cmax)) cmax = Math.max(...vals);
+    cmax = Math.min(1, Math.max(cmax, 1e-9));
+    return { cmin: 0, cmax, cmid: 0.5 };
+  }
+
+  const vals = rows
+    .map(r => getMetricValue(r, sexChoice, metric))
+    .filter(v => Number.isFinite(v));
+
+  if(vals.length === 0){
+    if(metric === "rank"){
+      return { cmin: Math.log10(1), cmax: Math.log10(4000), minRaw: 1, maxRaw: 4000 };
+    }
+    return { cmin: 0, cmax: 1 };
+  }
+
+  if(metric === "rank"){
+    const ranks = vals.map(v => Math.max(1, v));
+    const minRank = Math.min(...ranks);
+    let p95Rank = percentile(ranks, 95);
+    if(!Number.isFinite(p95Rank)) p95Rank = Math.max(...ranks);
+
+    const cmin = Math.log10(minRank);
+    const cmax = Math.log10(Math.max(p95Rank, minRank * 1.01));
+    return { cmin, cmax, minRaw: minRank, maxRaw: p95Rank };
+  }
+
+  const cmin = 0;
+  let cmax = percentile(vals, 95);
+  if(!Number.isFinite(cmax)) cmax = Math.max(...vals);
+  if(!(cmax > cmin)) cmax = cmin + 1e-9;
+  return { cmin, cmax };
+}
+
+function makeYearStateLookup(rows, sexChoice, metric){
+  const byYear = new Map();
+  for(const r of rows){
+    const v = getMetricValue(r, sexChoice, metric);
+    if(!Number.isFinite(v)) continue;
+    if(!byYear.has(r.year)) byYear.set(r.year, new Map());
+    byYear.get(r.year).set(r.State, v);
+  }
+  return byYear;
+}
+
+function makeYearStateLookupFemaleShare(rows){
+  const byYear = new Map();
+  for(const r of rows){
+    if(!byYear.has(r.year)) byYear.set(r.year, new Map());
+    byYear.get(r.year).set(r.State, {
+      share: r.female_share,
+      female_freq: r.female_freq,
+      male_freq: r.male_freq
+    });
+  }
+  return byYear;
+}
+
+// ---------- Colorbar formatting ----------
+function buildColorbar(metric, range){
+  const titleText = metricTitle(metric);
+
+  if(metric === "percentage"){
+    return {
+      title: { text: titleText, side: "top" },
+      tickformat: ".2f",
+      ticksuffix: "%"
+    };
+  }
+
+  if(metric === "frequency"){
+    return {
+      title: { text: titleText, side: "top" },
+      tickformat: ",.0f"
+    };
+  }
+
+  if(metric === FEMALE_SHARE_METRIC){
+    return {
+      title: { text: titleText, side: "top" },
+      tickformat: ".0%",
+      tickvals: [0, 0.25, 0.5, 0.75, 1],
+      ticktext: ["0%", "25%", "50%", "75%", "100%"]
+    };
+  }
+
+  const maxLog = range.cmax;
+  const minRank = range.minRaw ?? 1;
+
+  const candidates = Array.from(new Set([minRank, 10, 100, 1000, 4000]))
+    .filter(x => Number.isFinite(x) && x >= 1)
+    .sort((a,b)=>a-b);
+
+  const tickvals = [];
+  const ticktext = [];
+  for(const r of candidates){
+    const lv = Math.log10(Math.max(1, r));
+    if(lv >= range.cmin - 1e-12 && lv <= maxLog + 1e-12){
+      tickvals.push(lv);
+      ticktext.push(String(Math.round(r)));
+    }
+  }
+
+  return {
+    title: { text: titleText, side: "top" },
+    tickvals,
+    ticktext
+  };
+}
+
+function buildAnimatedChoropleth(rowsForFrames, rowsForRange, lookup, name, sexChoice, metric){
+  const years = Array.from(new Set(rowsForFrames.map(r => r.year))).sort((a,b)=>a-b);
+  if(years.length === 0) throw new Error("No usable year values after filtering.");
+
+  const fillRaw = missingFill(metric);
+  const range = computeColorAxisRangeP95(rowsForRange, sexChoice, metric);
+  const scale = colorscaleFor(sexChoice, metric);
+
+  function frameDataForYear(y){
+    const m = lookup.get(y) || new Map();
+    const locations = ALL_STATES.slice();
+
+    if(metric === FEMALE_SHARE_METRIC){
+      const z = [];
+      const customdata = [];
+      for(const st of locations){
+        if(m.has(st)){
+          const obj = m.get(st);
+          const share = Number.isFinite(obj.share) ? obj.share : 0.5;
+          z.push(share);
+          customdata.push([st, share, obj.female_freq ?? 0, obj.male_freq ?? 0]);
+        } else {
+          z.push(0.5);
+          customdata.push([st, 0.5, 0, 0]);
+        }
+      }
+      return {locations, z, customdata};
+    }
+
+    if(metric === "rank"){
+      const ranks = locations.map(st => (m.has(st) ? m.get(st) : fillRaw));
+      const z = ranks.map(r => Math.log10(Math.max(1, r)));
+      const customdata = locations.map((st, i) => [st, ranks[i]]);
+      return {locations, z, customdata};
+    }
+
+    const z = locations.map(st => (m.has(st) ? m.get(st) : fillRaw));
+    const customdata = locations.slice();
+    return {locations, z, customdata};
+  }
+
+  const d0 = frameDataForYear(years[0]);
+
+  const trace = {
+    type: "choropleth",
+    locationmode: "USA-states",
+    locations: d0.locations,
+    z: d0.z,
+    customdata: d0.customdata,
+    hovertemplate: formatHover(metric),
+    coloraxis: "coloraxis",
+    marker: {line: {color: "white", width: 0.7}}
+  };
+
+  const frames = years.map(y => {
+    const d = frameDataForYear(y);
+    return { name: String(y), data: [{ locations: d.locations, z: d.z, customdata: d.customdata }] };
+  });
+
+  const steps = years.map(y => ({
+    method: "animate",
+    label: String(y),
+    args: [[String(y)], { mode: "immediate", transition: {duration: 0}, frame: {duration: 250, redraw: true} }]
+  }));
+
+  const sexLabel = (sexChoice === "combined") ? "Combined" : (sexChoice === "M" ? "Male" : "Female");
+  const title = `${metricTitle(metric)} of "${name}" by State (${sexLabel})`;
+
+  const layout = {
+    title: {text: title, x: 0.5},
+    geo: {scope: "usa"},
+    margin: {l: 10, r: 10, t: 60, b: 10},
+    coloraxis: {
+      colorscale: scale,
+      cmin: range.cmin,
+      cmax: range.cmax,
+      ...(Number.isFinite(range.cmid) ? { cmid: range.cmid } : {}),
+      colorbar: buildColorbar(metric, range)
+    },
+    updatemenus: [{
+      type: "buttons",
+      direction: "left",
+      x: 0.02, y: 1.07,
+      xanchor: "left", yanchor: "top",
+      showactive: false,
+      buttons: [
+        { label: "Play",  method: "animate", args: [null, {fromcurrent: true, frame: {duration: 350, redraw: true}, transition: {duration: 0}}] },
+        { label: "Pause", method: "animate", args: [[null], {mode: "immediate", frame: {duration: 0, redraw: false}, transition: {duration: 0}}] }
+      ]
+    }],
+    sliders: [{
+      active: 0,
+      x: 0.02, y: 0.02,
+      xanchor: "left",
+      len: 0.96,
+      pad: {t: 30, b: 0},
+      currentvalue: {prefix: "Year: ", visible: true, xanchor: "right"},
+      steps: steps
+    }]
+  };
+
+  return {data: [trace], layout, frames};
+}
+
+async function render(){
+  const nameRaw = document.getElementById("nameInput").value.trim();
+  const sexChoice = document.getElementById("sexSelect").value;
+  const metric = document.getElementById("metricSelect").value;
+
+  if(!nameRaw){ setStatus("Enter a name first."); return; }
+
+  const letter = nameRaw[0].toUpperCase();
+  setStatus("Loading…");
+
+  try{
+    if(cached.letter !== letter || !cached.rows){
+      cached.rows = await loadCSVForLetter(letter);
+      cached.letter = letter;
+    }
+
+    const nameLower = nameRaw.toLowerCase();
+
+    let baseRows = cached.rows
+      .map(r => ({
+        name: (r.name || "").trim(),
+        year: toNum(r.year),
+        sex: (r.sex || "").trim(),
+        State: (r.State || "").trim(),
+        frequency: toNum(r.frequency),
+        percentage: toNum(r.percentage),
+        rank: toNum(r.rank),
+        overall_percentage: toNum(r.overall_percentage),
+        overall_rank: toNum(r.overall_rank)
+      }))
+      .filter(r =>
+        safeLower(r.name) === nameLower &&
+        Number.isFinite(r.year) &&
+        r.State && r.State.length === 2 &&
+        (r.sex === "M" || r.sex === "F")
+      );
+
+    if(baseRows.length === 0){
+      setStatus(`No data found for "${nameRaw}" in the ${letter} file.`);
+      Plotly.purge("plot");
+      return;
+    }
+
+    // Preserve active year on dropdown changes
+    const gd = document.getElementById("plot");
+    let activeYear = null;
+    try{
+      if(gd && gd._fullLayout?.sliders?.[0]){
+        const s = gd._fullLayout.sliders[0];
+        activeYear = s.steps?.[s.active]?.label ?? null;
+      }
+    }catch(e){}
+
+    let rowsForFrames, rowsForRange, lookup;
+
+    if(sexChoice === "combined" && metric === FEMALE_SHARE_METRIC){
+      rowsForFrames = buildFemaleShareRows(baseRows);
+      rowsForRange = rowsForFrames.filter(r => Number.isFinite(r.female_share));
+      lookup = makeYearStateLookupFemaleShare(rowsForFrames);
+    } else {
+      if(sexChoice === "combined"){
+        rowsForFrames = buildCombined(baseRows);
+      } else {
+        rowsForFrames = baseRows.filter(r => r.sex === sexChoice);
+      }
+
+      rowsForFrames = rowsForFrames.filter(r => Number.isFinite(getMetricValue(r, sexChoice, metric)));
+      rowsForRange = rowsForFrames;
+      lookup = makeYearStateLookup(rowsForFrames, sexChoice, metric);
+    }
+
+    if(rowsForFrames.length === 0){
+      setStatus(`No usable data for "${nameRaw}" after applying Sex/Metric filters.`);
+      Plotly.purge("plot");
+      return;
+    }
+
+    const fig = buildAnimatedChoropleth(rowsForFrames, rowsForRange, lookup, nameRaw, sexChoice, metric);
+
+    await Plotly.newPlot("plot", fig.data, fig.layout, {
+      responsive: true,
+      displayModeBar: false
+    });
+    Plotly.addFrames("plot", fig.frames);
+
+    if(activeYear && fig.frames.some(fr => fr.name === String(activeYear))){
+      Plotly.animate("plot", [String(activeYear)], {
+        mode: "immediate",
+        transition: {duration: 0},
+        frame: {duration: 0, redraw: true}
+      });
+    }
+
+    setStatus("");
+  }catch(err){
+    console.error(err);
+    setStatus("Error: " + (err?.message || err));
+    Plotly.purge("plot");
+  }
+}
+
+document.getElementById("goBtn").addEventListener("click", render);
+document.getElementById("nameInput").addEventListener("keydown", e => { if(e.key === "Enter") render(); });
+
+document.getElementById("sexSelect").addEventListener("change", () => {
+  updateMetricOptions();
+  if(document.getElementById("nameInput").value.trim()) render();
+});
+document.getElementById("metricSelect").addEventListener("change", () => {
+  if(document.getElementById("nameInput").value.trim()) render();
+});
+
+// Initialize dynamic metric option
+updateMetricOptions();
+</script>
+</body>
+</html>
+

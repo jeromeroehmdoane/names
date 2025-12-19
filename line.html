@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Name Popularity</title>
+
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: #fafafa;
+      color: #111;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 14px;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 10px 0 12px;
+      font-weight: 650;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e6e6e6;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+    input {
+      width: 100%;
+      font-size: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #e6e6e6;
+    }
+    button {
+      font-size: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: none;
+      background: #111;
+      color: #fff;
+      cursor: pointer;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #555;
+      min-height: 18px;
+    }
+    #plot {
+      margin-top: 12px;
+      width: 100%;
+      height: 64vh;
+      min-height: 420px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <h1>Explore Name Popularity</h1>
+
+  <div class="card">
+    <div class="row">
+      <input id="nameInput" placeholder="Enter a name (e.g., Taylor)" />
+      <button id="goBtn">Show</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div id="plot"></div>
+  </div>
+</div>
+
+<script>
+const BASE = "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/";
+const GROUPS = ["ABCD","EFGH","IJKL","MNOP","QRST","UVWXYZ"];
+
+function groupForName(name) {
+  return GROUPS.find(g => g.includes(name[0].toUpperCase()));
+}
+
+function loadPlot(name) {
+  name = name.trim();
+  if (!name) return;
+
+  const g = groupForName(name);
+  document.getElementById("status").textContent = "Loading…";
+
+  Papa.parse(`${BASE}small_data_${g}.csv`, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: res => {
+      renderPlot(name, res.data);
+      document.getElementById("status").textContent = "";
+    }
+  });
+}
+
+function renderPlot(name, rows) {
+  const data = rows
+    .filter(r => (r.name || "").toLowerCase() === name.toLowerCase())
+    .map(r => ({
+      year: +r.year,
+      sex: (r.sex || "").trim(),
+      frequency: +r.frequency,
+      percentage: +r.percentage,
+      rank: +r.rank
+    }))
+    .filter(r => Number.isFinite(r.year) && r.rank >= 1);
+
+  const m = data.filter(r => r.sex === "M").sort((a,b)=>a.year-b.year);
+  const f = data.filter(r => r.sex === "F").sort((a,b)=>a.year-b.year);
+
+  const combinedMap = {};
+  data.forEach(r => {
+    if (!combinedMap[r.year]) combinedMap[r.year] = { year:r.year, frequency:0, percentage:0, rank:r.rank };
+    combinedMap[r.year].frequency += r.frequency;
+    combinedMap[r.year].percentage += r.percentage;
+    combinedMap[r.year].rank = Math.min(combinedMap[r.year].rank, r.rank);
+  });
+  const c = Object.values(combinedMap).sort((a,b)=>a.year-b.year);
+
+  const hoverNonSep = {
+    frequency: "%{x}<br>Frequency: %{y:,.0f}<extra></extra>",
+    percentage: "%{x}<br>Percentage: %{y:.2f}%<extra></extra>",
+    rank: "%{x}<br>Rank: %{y:,.0f}<extra></extra>"
+  };
+  const hoverSep = {
+    frequency: "Frequency: %{y:,.0f}<extra></extra>",
+    percentage: "Percentage: %{y:.2f}%<extra></extra>",
+    rank: "Rank: %{y:,.0f}<extra></extra>"
+  };
+
+  const yaxisByMetric = {
+    frequency:{title:{text:"Frequency",standoff:20},tickformat:",.0f"},
+    percentage:{title:{text:"Percentage",standoff:20},tickformat:".2f",ticksuffix:"%"},
+    rank:{title:{text:"Rank (log scale)",standoff:20},type:"log",autorange:"reversed"}
+  };
+
+  let currentMetric = "frequency";
+  let currentSex = "combined";
+
+  Plotly.newPlot("plot", [
+    {x:c.map(d=>d.year),y:c.map(d=>d.frequency),mode:"lines",name:"Combined",line:{color:"purple"},hovertemplate:hoverNonSep.frequency},
+    {x:m.map(d=>d.year),y:m.map(d=>d.frequency),mode:"lines",name:"Male",line:{color:"blue"},visible:false},
+    {x:f.map(d=>d.year),y:f.map(d=>d.frequency),mode:"lines",name:"Female",line:{color:"red"},visible:false}
+  ], {
+    title:{text:`Popularity of ${name} over time`,x:0.02},
+    xaxis:{title:"Year"},
+    yaxis:yaxisByMetric.frequency,
+    hovermode:"closest",
+    margin:{l:70,r:15,t:95,b:55},
+    showlegend:false,
+    legend:{
+      x:0.02,y:0.98,
+      xanchor:"left",yanchor:"top",
+      bgcolor:"rgba(255,255,255,0.75)",
+      bordercolor:"rgba(0,0,0,0.10)",
+      borderwidth:1
+    },
+    annotations:[
+      {x:0.78,y:1.23,xref:"paper",yref:"paper",text:"Sex",showarrow:false,xanchor:"right"},
+      {x:1.0,y:1.23,xref:"paper",yref:"paper",text:"Y-Axis",showarrow:false,xanchor:"right"}
+    ],
+    updatemenus:[
+      {
+        x:1,y:1.18,xanchor:"right",
+        buttons:[
+          {label:"frequency",method:"update",
+           args:[{y:[c.map(d=>d.frequency),m.map(d=>d.frequency),f.map(d=>d.frequency)],
+                  hovertemplate:[hoverNonSep.frequency,hoverNonSep.frequency,hoverNonSep.frequency]},
+                 {yaxis:yaxisByMetric.frequency}]},
+          {label:"percentage",method:"update",
+           args:[{y:[c.map(d=>d.percentage),m.map(d=>d.percentage),f.map(d=>d.percentage)],
+                  hovertemplate:[hoverNonSep.percentage,hoverNonSep.percentage,hoverNonSep.percentage]},
+                 {yaxis:yaxisByMetric.percentage}]},
+          {label:"rank",method:"update",
+           args:[{y:[c.map(d=>d.rank),m.map(d=>d.rank),f.map(d=>d.rank)],
+                  hovertemplate:[hoverNonSep.rank,hoverNonSep.rank,hoverNonSep.rank]},
+                 {yaxis:yaxisByMetric.rank}]}
+        ]
+      },
+      {
+        x:0.78,y:1.18,xanchor:"right",
+        buttons:[
+          {label:"combined",method:"update",args:[{visible:[true,false,false]},{hovermode:"closest",showlegend:false}]},
+          {label:"separate",method:"update",args:[{visible:[false,true,true]},{hovermode:"x unified",showlegend:true}]},
+          {label:"male",method:"update",args:[{visible:[false,true,false]},{hovermode:"closest",showlegend:false}]},
+          {label:"female",method:"update",args:[{visible:[false,false,true]},{hovermode:"closest",showlegend:false}]}
+        ]
+      }
+    ]
+  },{responsive:true,displayModeBar:false}).then(gd=>{
+    gd.on("plotly_buttonclicked",e=>{
+      if(["frequency","percentage","rank"].includes(e.button.label)) currentMetric=e.button.label;
+      if(["combined","separate","male","female"].includes(e.button.label)) currentSex=e.button.label;
+
+      Plotly.update(gd,{
+        hovertemplate:
+          currentSex==="separate"
+            ? [null,hoverSep[currentMetric],hoverSep[currentMetric]]
+            : [hoverNonSep[currentMetric],hoverNonSep[currentMetric],hoverNonSep[currentMetric]]
+      });
+    });
+  });
+}
+
+document.getElementById("goBtn").onclick=()=>loadPlot(document.getElementById("nameInput").value);
+document.getElementById("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")loadPlot(e.target.value);});
+</script>
+</body>
+</html>
+

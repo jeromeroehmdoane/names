@@ -602,3 +602,15 @@ updateMetricOptions();
 </script>
 </body>
 </html>
+
+<script>
+  // Bridge: accept name from parent and run without changing any calculations.
+  window.addEventListener("message", (event) => {
+    const d = event.data || {};
+    if (d.type !== "SET_INPUTS_AND_RUN") return;
+
+    if (typeof d.name === "string") document.getElementById("nameInput").value = d.name;
+    document.getElementById("goBtn").click();
+  });
+</script>
+

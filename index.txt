@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Name Popularity Dashboard</title>
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:rgba(255,255,255,0.06);
+      --panel2:rgba(255,255,255,0.08);
+      --text:rgba(255,255,255,0.92);
+      --muted:rgba(255,255,255,0.68);
+      --border:rgba(255,255,255,0.12);
+      --accent:#60a5fa;
+      --shadow:0 18px 60px rgba(0,0,0,0.55);
+      --r:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:
+        radial-gradient(1200px 600px at 20% 0%, rgba(96,165,250,0.22), transparent 60%),
+        radial-gradient(900px 500px at 90% 10%, rgba(244,114,182,0.16), transparent 60%),
+        radial-gradient(900px 700px at 60% 110%, rgba(52,211,153,0.12), transparent 60%),
+        var(--bg);
+      color:var(--text);
+    }
+    .wrap{max-width:1120px;margin:0 auto;padding:18px 14px 40px}
+    .header{
+      border:1px solid var(--border);
+      background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05));
+      box-shadow:var(--shadow);
+      border-radius:22px;
+      padding:16px;
+      position:sticky;
+      top:10px;
+      z-index:10;
+      backdrop-filter:blur(10px);
+    }
+    h1{margin:0;font-size:18px;font-weight:700}
+    .sub{margin:6px 0 0;color:var(--muted);font-size:13px}
+    .controls{
+      margin-top:12px;
+      display:grid;
+      grid-template-columns: 1.6fr 1fr 1fr auto;
+      gap:10px;
+      align-items:end;
+    }
+    label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+    input{
+      width:100%;
+      padding:11px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,0.22);
+      color:var(--text);
+      outline:none;
+    }
+    button{
+      padding:11px 14px;
+      border-radius:12px;
+      border:1px solid rgba(96,165,250,0.35);
+      background:linear-gradient(180deg, rgba(96,165,250,0.20), rgba(96,165,250,0.10));
+      color:var(--text);
+      cursor:pointer;
+      font-weight:650;
+      white-space:nowrap;
+    }
+    button:hover{background:linear-gradient(180deg, rgba(96,165,250,0.26), rgba(96,165,250,0.14));}
+
+    .grid{margin-top:16px;display:grid;gap:14px}
+    .card{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);
+      border-radius:22px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .cardHeader{
+      padding:12px 14px;
+      border-bottom:1px solid rgba(255,255,255,0.08);
+      background:rgba(255,255,255,0.03);
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:baseline;
+    }
+    .cardTitle{margin:0;font-size:14px;font-weight:700}
+    .cardNote{margin:0;font-size:12px;color:var(--muted)}
+    .cardBody{padding:0}
+
+    iframe{
+      width:100%;
+      border:0;
+      display:block;
+      background:#fff;
+    }
+
+    /* Reasonable default heights; adjust anytime */
+    #frameSummary{height:900px;}
+    #frameLine{height:620px;}
+    #frameMap{height:760px;}
+
+    @media (max-width: 980px){
+      .controls{grid-template-columns:1fr 1fr;}
+    }
+    @media (max-width: 620px){
+      .controls{grid-template-columns:1fr;}
+      #frameSummary{height:980px;}
+      #frameLine{height:680px;}
+      #frameMap{height:820px;}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>Name Popularity Dashboard</h1>
+      <p class="sub">One input. Three embedded modules (summary, line chart, state map).</p>
+
+      <div class="controls" role="form">
+        <div>
+          <label for="name">Name</label>
+          <input id="name" placeholder="e.g., Olivia" />
+        </div>
+        <div>
+          <label for="state">State (2-letter)</label>
+          <input id="state" placeholder="e.g., NE" maxlength="2" />
+        </div>
+        <div>
+          <label for="year">Year</label>
+          <input id="year" type="number" min="1880" max="2100" placeholder="e.g., 2010" />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="generate" type="button">Generate</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <div class="cardHeader">
+          <p class="cardTitle">Narrative Summary and Tables</p>
+          <p class="cardNote">Embedded from textSummary.html</p>
+        </div>
+        <div class="cardBody">
+          <iframe id="frameSummary" src="textSummary.html" title="Summary"></iframe>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="cardHeader">
+          <p class="cardTitle">National Trend Over Time</p>
+          <p class="cardNote">Embedded from line.html</p>
+        </div>
+        <div class="cardBody">
+          <iframe id="frameLine" src="line.html" title="Line chart"></iframe>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="cardHeader">
+          <p class="cardTitle">State Map Over Time</p>
+          <p class="cardNote">Embedded from map.html</p>
+        </div>
+        <div class="cardBody">
+          <iframe id="frameMap" src="map.html" title="Map"></iframe>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    function cleanTitleCase(s){
+      s = (s || "").trim();
+      if(!s) return "";
+      return s[0].toUpperCase() + s.slice(1).toLowerCase();
+    }
+
+    function postToFrames(payload){
+      // same-origin on GitHub Pages when all files are in same folder
+      const frames = ["frameSummary","frameLine","frameMap"]
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+
+      frames.forEach(f => {
+        // send to the iframe window
+        f.contentWindow.postMessage(payload, "*");
+      });
+    }
+
+    function generate(){
+      const name = cleanTitleCase(document.getElementById("name").value);
+      const state = (document.getElementById("state").value || "").trim().toUpperCase();
+      const year = (document.getElementById("year").value || "").trim();
+
+      postToFrames({ type: "SET_INPUTS_AND_RUN", name, state, year });
+    }
+
+    document.getElementById("generate").addEventListener("click", generate);
+
+    // Enter key in any input runs everything
+    ["name","state","year"].forEach(id => {
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){ e.preventDefault(); generate(); }
+      });
+    });
+  </script>
+</body>
+</html>

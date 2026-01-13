@@ -221,8 +221,6 @@ function renderPlot(name, rows) {
 document.getElementById("goBtn").onclick=()=>loadPlot(document.getElementById("nameInput").value);
 document.getElementById("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")loadPlot(e.target.value);});
 </script>
-</body>
-</html>
 
 <script>
   // Bridge: accept name from parent and run without changing any calculations.
@@ -234,5 +232,8 @@ document.getElementById("nameInput").addEventListener("keydown",e=>{if(e.key==="
     document.getElementById("goBtn").click();
   });
 </script>
+
+</body>
+</html>
 
 

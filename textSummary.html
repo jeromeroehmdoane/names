@@ -629,6 +629,23 @@
   });
 })();
 </script>
+
+<script>
+  // Bridge: accept inputs from parent index.html and run without changing any calculations.
+  window.addEventListener("message", (event) => {
+    const d = event.data || {};
+    if (d.type !== "SET_INPUTS_AND_RUN") return;
+
+    if (typeof d.name === "string") document.getElementById("nameInput").value = d.name;
+    if (typeof d.state === "string") document.getElementById("stateInput").value = d.state;
+    if (typeof d.year === "string") document.getElementById("yearInput").value = d.year;
+
+    // Trigger existing behavior
+    document.getElementById("runBtn").click();
+  });
+</script>
+
+  
 </body>
 </html>
 

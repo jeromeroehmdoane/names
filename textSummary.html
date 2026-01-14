@@ -3,62 +3,187 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Name Summary</title>
+  <title>Summary</title>
+
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; line-height: 1.35; margin: 24px; }
-    h2 { margin-top: 28px; }
-    .controls { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; max-width: 900px; }
-    label { font-size: 0.9rem; display: block; margin-bottom: 4px; }
-    input { width: 100%; padding: 10px; font-size: 1rem; }
-    button { padding: 10px 14px; font-size: 1rem; cursor: pointer; }
-    pre { background: #f6f7f9; padding: 12px; overflow: auto; border-radius: 8px; }
-    table { border-collapse: collapse; width: 100%; max-width: 900px; margin: 8px 0 16px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f1f3f5; }
-    .muted { color: #666; }
+    :root{
+      --text:#111827;
+      --muted:#6b7280;
+      --border:#e6e8eb;
+      --panel:#ffffff;
+      --shadow:0 10px 30px rgba(0,0,0,0.08);
+      --r:14px;
+
+      /* Match index background dark blue */
+      --deep:#0b1220;
+
+      /* Meter base gradient (light -> deep) */
+      --light:#f7fafc;
+
+      /* Marker styles */
+      --markerFill:#60a5fa; /* subtle but visible */
+      --markerBorder:#ffffff;
+      --markerHalo:rgba(96,165,250,0.22);
+
+      --barBorder:rgba(17,24,39,0.10);
+
+      --tooltip:#111827;
+      --tooltipText:#ffffff;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      line-height: 1.35;
+      margin: 24px;
+      color:var(--text);
+      background:#fff;
+    }
+
+    /* Hide local controls (keep in DOM for message bridge + internal wiring) */
+    #localControls { display:none; }
+
+    .hint{
+      max-width: 900px;
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
     .error { color: #b00020; white-space: pre-wrap; }
-    .card { max-width: 900px; padding: 14px; border: 1px solid #e6e8eb; border-radius: 10px; background: #fff; margin-top: 12px; }
-    .spinner { display: none; margin-left: 10px; }
+
+    .card {
+      max-width: 900px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      background: var(--panel);
+      margin-top: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    h2 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
+
     .bold-row td { font-weight: 700; }
 
-    /* Remove up/down arrows (spinners) for number input */
-    input[type=number] { -moz-appearance: textfield; appearance: textfield; }
-    input[type=number]::-webkit-outer-spin-button,
-    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    table { border-collapse: collapse; width: 100%; max-width: 900px; margin: 8px 0 16px; background:#fff; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f1f3f5; }
+
+    /* ---------- Text blocks (replace gray <pre>) ---------- */
+    .statBlock{
+      border: 1px solid rgba(17,24,39,0.08);
+      background: linear-gradient(180deg, #ffffff, #fbfcfe);
+      border-radius: 12px;
+      padding: 12px 12px 10px;
+      margin-top: 10px;
+    }
+    .statText{
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+    }
+
+    /* ---------- Overall summary stack ---------- */
+    .overallStack{ display:grid; gap:12px; margin-top: 8px; }
+
+    /* ---------- Meters ---------- */
+    .meterWrap{ display:grid; gap:6px; margin-top: 10px; }
+    .meterLabels{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      font-size:12px;
+      color: var(--muted);
+    }
+    .meterBar{
+      position: relative;
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid var(--barBorder);
+      overflow: visible;
+      background: linear-gradient(90deg, var(--light), var(--deep));
+    }
+    .meterBar.sex{
+      background: linear-gradient(90deg, #fbcfe8, #ffffff, #93c5fd);
+    }
+
+    /* Marker: dot + tick; visible on light and dark backgrounds */
+    .meterMarker{
+      position:absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--markerFill);
+      border: 2px solid var(--markerBorder);
+      box-shadow: 0 0 0 6px var(--markerHalo);
+      cursor: default;
+      z-index: 2;
+    }
+    .meterMarker::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 18px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.65);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+      z-index: -1;
+    }
+
+    /* Desktop-only hover tooltip */
+    @media (hover:hover) and (pointer:fine){
+      .meterMarker[data-tip]::after{
+        content: attr(data-tip);
+        position:absolute;
+        left:50%;
+        transform: translate(-50%, calc(-100% - 12px));
+        background: var(--tooltip);
+        color: var(--tooltipText);
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+        filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+      }
+      .meterMarker:hover::after{ opacity: 1; }
+    }
+
+    @media (max-width: 520px){
+      body{ margin: 16px; }
+      .meterLabels{ font-size:11px; }
+    }
   </style>
-  <!-- CSV parser -->
+
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
+
 <body>
-  <h1>Name Summary</h1>
+  <!-- No "Name Summary" header here; index already labels the section -->
+  <div id="messages" class="hint">Enter a name above.</div>
 
-  <div class="controls">
-    <div>
-      <label for="nameInput">Name</label>
-      <input id="nameInput" placeholder="e.g., Olivia" />
-    </div>
-    <div>
-      <label for="stateInput">State (2-letter code)</label>
-      <input id="stateInput" placeholder="e.g., KS" />
-    </div>
-    <div>
-      <label for="yearInput">Year</label>
-      <input id="yearInput" type="number" min="1880" max="2100" placeholder="e.g., 2020" />
-    </div>
-    <div>
-      <button id="runBtn">Generate</button>
-      <span class="spinner" id="spinner">Loading…</span>
-    </div>
+  <!-- Hidden local controls retained for internal wiring + bridge -->
+  <div id="localControls">
+    <input id="nameInput" />
+    <input id="stateInput" />
+    <input id="yearInput" />
+    <button id="runBtn">Generate</button>
   </div>
-
-  <div id="messages" class="card muted">Enter a name, state, and year, then click Generate.</div>
 
   <div id="output"></div>
 
 <script>
 (() => {
   // ============================================================
-  // Constants / URLs (same datasets as your Python)
+  // Constants / URLs
   // ============================================================
   const BASE_RAW = "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/";
 
@@ -85,15 +210,13 @@
   };
 
   // ============================================================
-  // Helpers (mirror Python behavior)
+  // Helpers
   // ============================================================
   function ordinal(n) {
     n = parseInt(n, 10);
     if (!Number.isFinite(n)) return "N/A";
-    const mod100 = n % 100;
-    if (10 <= mod100 && mod100 <= 20) return `${n}th`;
-    const mod10 = n % 10;
-    const suf = ({1:"st", 2:"nd", 3:"rd"}[mod10]) || "th";
+    if (10 <= (n % 100) && (n % 100) <= 20) return `${n}th`;
+    const suf = ({1:"st", 2:"nd", 3:"rd"}[n % 10]) || "th";
     return `${n}${suf}`;
   }
 
@@ -103,7 +226,6 @@
     return `${(100 * v).toFixed(decimals)}%`;
   }
 
-  // Parse CSV via PapaParse into array of objects
   async function loadCSV(url) {
     return new Promise((resolve, reject) => {
       Papa.parse(url, {
@@ -117,7 +239,6 @@
     });
   }
 
-  // Group-by sum frequency, keyed by exact fields used in Python
   function groupSum(rows, keyFields, sumField) {
     const map = new Map();
     for (const r of rows) {
@@ -149,6 +270,30 @@
 
   function toLowerTrim(s) {
     return String(s ?? "").trim().toLowerCase();
+  }
+
+  function clamp01(x){
+    const v = Number(x);
+    if (!Number.isFinite(v)) return 0;
+    return Math.min(1, Math.max(0, v));
+  }
+
+  function clearOutput() {
+    document.getElementById("output").innerHTML = "";
+  }
+
+  function setHint(text){
+    const el = document.getElementById("messages");
+    if (!el) return;
+    el.className = "hint";
+    el.textContent = text;
+  }
+
+  function setError(text){
+    const el = document.getElementById("messages");
+    if (!el) return;
+    el.className = "hint error";
+    el.textContent = text;
   }
 
   function renderTable(container, title, rows, columns, opts = {}) {
@@ -189,44 +334,152 @@
     container.appendChild(wrap);
   }
 
-  function showMessage(text, isError=false) {
-    const el = document.getElementById("messages");
-    el.className = "card " + (isError ? "error" : "muted");
-    el.textContent = text;
+  function makeTextBlock(text){
+    const blk = document.createElement("div");
+    blk.className = "statBlock";
+    const p = document.createElement("p");
+    p.className = "statText";
+    p.textContent = text;
+    blk.appendChild(p);
+    return blk;
   }
 
-  function clearOutput() {
-    document.getElementById("output").innerHTML = "";
+  // ---------- Meter component ----------
+  function makeMeter({ leftLabel, rightLabel, value01, tooltip, variant }) {
+    const wrap = document.createElement("div");
+    wrap.className = "meterWrap";
+
+    const labels = document.createElement("div");
+    labels.className = "meterLabels";
+    labels.innerHTML = `<span>${leftLabel}</span><span>${rightLabel}</span>`;
+
+    const bar = document.createElement("div");
+    bar.className = "meterBar" + (variant ? ` ${variant}` : "");
+
+    const marker = document.createElement("div");
+    marker.className = "meterMarker";
+    marker.style.left = `${(100 * clamp01(value01)).toFixed(2)}%`;
+    if (tooltip) marker.setAttribute("data-tip", tooltip);
+
+    bar.appendChild(marker);
+    wrap.appendChild(labels);
+    wrap.appendChild(bar);
+    return wrap;
   }
 
-  function setLoading(on) {
-    document.getElementById("spinner").style.display = on ? "inline" : "none";
-    document.getElementById("runBtn").disabled = on;
+  // ---------- Overall summary renderer ----------
+  function renderOverallSummary(overallCard, data) {
+    overallCard.innerHTML = `<h2>Overall Summary (All Time)</h2>`;
+
+    const stack = document.createElement("div");
+    stack.className = "overallStack";
+
+    // 1) Popularity: Least -> Most (left -> right), marker at rank percentile
+    const line1 =
+      `${data.name} is the ${ordinal(data.rank_all_time)} most popular US name of all time ` +
+      `(${data.rank_pct.toFixed(0)}th percentile) with ${data.total_all_time.toLocaleString()} ${data.name}'s born.`;
+
+    const b1 = document.createElement("div");
+    b1.className = "statBlock";
+    b1.appendChild(Object.assign(document.createElement("p"), { className:"statText", textContent: line1 }));
+    b1.appendChild(makeMeter({
+      leftLabel: "Least popular",
+      rightLabel: "Most popular",
+      value01: clamp01(data.rank_pct / 100),
+      tooltip: `${data.rank_pct.toFixed(0)}th percentile`
+    }));
+    stack.appendChild(b1);
+
+    // 2) Sex: pink -> white -> blue
+    const line2 = `${data.sex_word} ${data.name}'s are ${data.dominant_sex} (${pct(data.dominant_prop, 1)}).`;
+    const b2 = document.createElement("div");
+    b2.className = "statBlock";
+    b2.appendChild(Object.assign(document.createElement("p"), { className:"statText", textContent: line2 }));
+    b2.appendChild(makeMeter({
+      leftLabel: "All girls",
+      rightLabel: "All boys",
+      value01: clamp01(data.prop_male),
+      tooltip: `${pct(data.prop_male, 1)} boys`,
+      variant: "sex"
+    }));
+    stack.appendChild(b2);
+
+    // 3) Mean birth year: Older -> Younger (low -> high)
+    const line3 =
+      `The average birth year was ${data.mean_year.toFixed(0)} ` +
+      `(${data.mean_year_pct.toFixed(0)}th percentile – ${data.age_word} than most).`;
+
+    const b3 = document.createElement("div");
+    b3.className = "statBlock";
+    b3.appendChild(Object.assign(document.createElement("p"), { className:"statText", textContent: line3 }));
+    b3.appendChild(makeMeter({
+      leftLabel: "Older",
+      rightLabel: "Younger",
+      value01: clamp01(data.mean_year_pct / 100),
+      tooltip: `${data.mean_year_pct.toFixed(0)}th percentile`
+    }));
+    stack.appendChild(b3);
+
+    // 4) Peak block + Trendiness meter: Timeless -> Trendy
+    const b4 = document.createElement("div");
+    b4.className = "statBlock";
+    const t4 = document.createElement("p");
+    t4.className = "statText";
+    t4.textContent =
+      `Peak frequency came in ${data.peak_year} with ${data.peak_freq.toLocaleString()} births.\n` +
+      `The peak 10 year window was ${data.win_start} to ${data.win_end} with ${pct(data.win_prop, 1)} of all ${data.name}'s born in that time.\n` +
+      `That puts its trendy/timeless percentile as ${data.trend_pct.toFixed(0)}% – ${data.trend_word}.`;
+    b4.appendChild(t4);
+    b4.appendChild(makeMeter({
+      leftLabel: "Timeless",
+      rightLabel: "Trendy",
+      value01: clamp01(data.trend_pct / 100),
+      tooltip: `${data.trend_pct.toFixed(0)}th percentile`
+    }));
+    stack.appendChild(b4);
+
+    // 5) Scrabble: Lower -> Higher
+    const line5 = `The Scrabble score for ${data.name} is ${data.scrabble_score_val}. (${data.scrabble_pct.toFixed(0)}th percentile) `;
+    const b5 = document.createElement("div");
+    b5.className = "statBlock";
+    b5.appendChild(Object.assign(document.createElement("p"), { className:"statText", textContent: line5 }));
+    b5.appendChild(makeMeter({
+      leftLabel: "Lower",
+      rightLabel: "Higher",
+      value01: clamp01(data.scrabble_pct / 100),
+      tooltip: `${data.scrabble_pct.toFixed(0)}th percentile`
+    }));
+    stack.appendChild(b5);
+
+    overallCard.appendChild(stack);
   }
 
   // ============================================================
-  // Main logic (preserves your calculations/flow)
+  // Main logic
   // ============================================================
   async function writeSummaryHTML(name, state, year) {
     clearOutput();
-    showMessage("Running…");
-    setLoading(true);
 
     try {
-      // Inputs / Setup (mirror Python)
-      name = String(name).trim();
-      state = String(state).trim();
-      year = parseInt(year, 10);
+      name = String(name ?? "").trim();
+      const stateRaw = String(state ?? "").trim().toUpperCase();
+      const yearRaw = String(year ?? "").trim();
+      const yearNum = (yearRaw === "") ? NaN : parseInt(yearRaw, 10);
 
-      if (!name || !state || !Number.isFinite(year)) {
-        showMessage("Please provide a valid name, state, and year.", true);
+      const hasState = (stateRaw.length === 2);
+      const hasYear = Number.isFinite(yearNum);
+
+      if (!name) {
+        setHint("Enter a name above.");
         return;
       }
+
+      setHint(""); // remove hint once we have a name
 
       const firstLetter = name[0].toUpperCase();
       const firstLetterGroup = groups.find(g => g.includes(firstLetter));
       if (!firstLetterGroup) {
-        showMessage(`Error: First letter '${firstLetter}' not in any defined group.`, true);
+        setError(`Error: First letter '${firstLetter}' not in any defined group.`);
         return;
       }
 
@@ -236,17 +489,15 @@
       // 1) OVERALL SUMMARY (ALL TIME)
       // ============================================================
       const overall_summary = await loadCSV(URLS.overall_summary);
-
       const match = overall_summary.filter(r => toLowerTrim(r["name"]) === name.toLowerCase());
 
-      let overallText = null;
       const overallCard = document.createElement("div");
       overallCard.className = "card";
-      overallCard.innerHTML = `<h2>OVERALL SUMMARY (ALL TIME)</h2>`;
       out.appendChild(overallCard);
 
       if (match.length === 0) {
-        overallCard.innerHTML += `<pre>No overall summary data found for name '${name}'.\n\nProceeding with year/state summaries (if available).</pre>`;
+        overallCard.innerHTML = `<h2>Overall Summary (All Time)</h2>`;
+        overallCard.appendChild(makeTextBlock(`No overall summary data found for name '${name}'.`));
       } else {
         const r = match[0];
 
@@ -286,264 +537,334 @@
         else if (trend_pct >= 35) trend_word = "moderately timeless";
         else trend_word = "very timeless";
 
-        overallText =
-          `${name} is the ${ordinal(rank_all_time)} most popular US name of all time ` +
-          `(${rank_pct.toFixed(0)}th percentile) with ${total_all_time.toLocaleString()} ${name}'s born.\n` +
-          `${sex_word} ${name}'s are ${dominant_sex} (${pct(dominant_prop, 1)}).\n` +
-          `The average birth year was ${mean_year.toFixed(0)} ` +
-          `(${mean_year_pct.toFixed(0)}th percentile – ${age_word} than most).\n` +
-          `Peak frequency came in ${peak_year} with ${peak_freq.toLocaleString()} births.\n` +
-          `The peak 10 year window was ${win_start} to ${win_end} with ` +
-          `${pct(win_prop, 1)} of all ${name}'s born in that time.\n` +
-          `That puts its trendy/timeless percentile as ${trend_pct.toFixed(0)}% – ${trend_word}.\n` +
-          `The Scrabble score for ${name} is ${scrabble_score_val}. (${scrabble_pct.toFixed(0)}th percentile) `;
-
-        overallCard.innerHTML += `<pre>${overallText}</pre>`;
+        renderOverallSummary(overallCard, {
+          name,
+          total_all_time,
+          rank_all_time,
+          rank_pct,
+          prop_male,
+          dominant_sex,
+          dominant_prop,
+          sex_word,
+          mean_year,
+          mean_year_pct,
+          age_word,
+          peak_freq,
+          peak_year,
+          win_start,
+          win_end,
+          win_prop,
+          trend_pct,
+          trend_word,
+          scrabble_score_val,
+          scrabble_pct
+        });
       }
 
       // ============================================================
-      // 2) YEAR-SPECIFIC SUMMARY (NATIONWIDE)
+      // 2) NATIONAL SUMMARY
       // ============================================================
-      const df_national_all = await loadCSV(URLS.small_data_group(firstLetterGroup));
+      if (!Number.isFinite(parseInt(yearRaw, 10))) {
+        const yearCard = document.createElement("div");
+        yearCard.className = "card";
+        yearCard.innerHTML = `<h2>National Summary (All Time)</h2>`;
+        out.appendChild(yearCard);
 
-      const df_national_name_year = df_national_all.filter(r =>
-        String(r["name"]) === name && parseInt(r["year"], 10) === year
-      );
+        const top5_alltime = overall_summary
+          .filter(r => Number(r["all_time_rank"]) <= 5)
+          .map(r => ({
+            name: r["name"],
+            all_time_rank: r["all_time_rank"],
+            total_frequency: r["total_frequency"]
+          }));
 
-      const yearCard = document.createElement("div");
-      yearCard.className = "card";
-      yearCard.innerHTML = `<h2>National Summary (${year})</h2>`;
-      out.appendChild(yearCard);
+        const target_alltime = (match.length > 0)
+          ? {
+              name: match[0]["name"],
+              all_time_rank: match[0]["all_time_rank"],
+              total_frequency: match[0]["total_frequency"]
+            }
+          : null;
 
-      let overall_rank_us = null;
-      let total_freq_us = 0;
-      let male_freq_us = 0;
-      let female_freq_us = 0;
+        let tableData = top5_alltime.slice().sort((a,b) => Number(a.all_time_rank) - Number(b.all_time_rank));
 
-      if (df_national_name_year.length === 0) {
-        yearCard.innerHTML += `<pre>No national data found for ${name} in ${year}.</pre>`;
-      } else {
-        const target_name_national_agg = groupSum(
-          df_national_name_year,
-          ["name", "year", "overall_rank", "overall_percentage"],
-          "frequency"
-        );
+        if (target_alltime) {
+          const targetRank = Number(target_alltime.all_time_rank);
+          const inTop5 = tableData.some(r => toLowerTrim(r.name) === toLowerTrim(target_alltime.name));
 
-        total_freq_us = target_name_national_agg.reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
-
-        male_freq_us = df_national_name_year
-          .filter(r => String(r["sex"]) === "M")
-          .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
-
-        female_freq_us = df_national_name_year
-          .filter(r => String(r["sex"]) === "F")
-          .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
-
-        const overall_rank_us_val = (target_name_national_agg.length > 0) ? target_name_national_agg[0]["overall_rank"] : null;
-        if (overall_rank_us_val !== null && overall_rank_us_val !== undefined && String(overall_rank_us_val).trim() !== "" && String(overall_rank_us_val).toLowerCase() !== "nan") {
-          const v = Number(overall_rank_us_val);
-          if (Number.isFinite(v)) overall_rank_us = parseInt(v, 10);
-        }
-
-        const rank_str = (overall_rank_us !== null) ? ordinal(overall_rank_us) : "N/A";
-
-        const summary_text_year =
-          `There were ${total_freq_us.toLocaleString()} babies born in the US with the name ${name} in ${year} ` +
-          `(${male_freq_us.toLocaleString()} M, ${female_freq_us.toLocaleString()} F).\n` +
-          `It was the ${rank_str} most popular name nationwide that year.\n` +
-          `See the tables below for more.`;
-
-        yearCard.innerHTML += `<pre>${summary_text_year}</pre>`;
-
-        // National popularity table (top 5 + target row, with ellipses; columns reordered/renamed)
-        const df_national_top_all = await loadCSV(URLS.top_names_national_yearly);
-        const df_national_top_year = df_national_top_all.filter(r => parseInt(r["year"], 10) === year);
-
-        let national_table_data = df_national_top_year.filter(r => Number(r["overall_rank"]) <= 5);
-        national_table_data = groupSum(
-          national_table_data,
-          ["name", "overall_rank", "overall_percentage"],
-          "frequency"
-        );
-        national_table_data = sortByNumericField(national_table_data, "overall_rank", true);
-
-        const target_row = target_name_national_agg.slice(0, 1).map(r => ({
-          name: r["name"],
-          frequency: r["frequency"],
-          overall_rank: r["overall_rank"],
-          overall_percentage: r["overall_percentage"]
-        }));
-
-        if (target_row.length) {
-          const target_rank = Number(target_row[0].overall_rank);
-          const inTop5 = national_table_data.some(r => toLowerTrim(r.name) === name.toLowerCase());
-
-          if (Number.isFinite(target_rank) && target_rank > 5 && !inTop5) {
-            const dots = { name: "...", frequency: "...", overall_rank: "...", overall_percentage: "..." };
-            const insert_idx = national_table_data.filter(r => {
-              const v = Number(r.overall_rank);
-              return Number.isFinite(v) && v < target_rank;
+          if (Number.isFinite(targetRank) && targetRank > 5 && !inTop5) {
+            const dots = { name: "...", all_time_rank: "...", total_frequency: "..." };
+            const insertIdx = tableData.filter(r => {
+              const v = Number(r.all_time_rank);
+              return Number.isFinite(v) && v < targetRank;
             }).length;
 
-            national_table_data = [
-              ...national_table_data.slice(0, insert_idx),
+            tableData = [
+              ...tableData.slice(0, insertIdx),
               dots,
-              ...target_row,
-              ...national_table_data.slice(insert_idx)
+              target_alltime,
+              ...tableData.slice(insertIdx)
             ];
-          } else if (!inTop5 && Number.isFinite(target_rank) && target_rank <= 5) {
-            // If it should be in top5 but isn't due to case mismatch, append and resort
-            national_table_data.push(target_row[0]);
-            national_table_data = groupSum(
-              national_table_data,
-              ["name", "overall_rank", "overall_percentage"],
-              "frequency"
-            );
-            national_table_data = sortByNumericField(national_table_data, "overall_rank", true);
+          } else if (!inTop5 && Number.isFinite(targetRank) && targetRank <= 5) {
+            tableData.push(target_alltime);
+            tableData = tableData.slice().sort((a,b) => Number(a.all_time_rank) - Number(b.all_time_rank));
           }
         }
 
-        const nat_rows = national_table_data.map(r => ({
-          "National Rank": r.overall_rank,
+        const nat_rows_alltime = tableData.map(r => ({
+          "National Rank": r.all_time_rank,
           "Name": r.name,
-          "Frequency": (r.frequency === "...") ? "..." : (Number(r.frequency) || 0).toLocaleString(),
-          "Percentage": r.overall_percentage
+          "Frequency": (r.total_frequency === "...") ? "..." : (Number(r.total_frequency) || 0).toLocaleString()
         }));
 
         renderTable(
           yearCard,
-          `National Popularity Table (${year}):`,
-          nat_rows,
-          ["National Rank", "Name", "Frequency", "Percentage"],
+          `National Popularity Table (All Time):`,
+          nat_rows_alltime,
+          ["National Rank", "Name", "Frequency"],
           { boldRowPredicate: (r) => String(r["Name"]).toLowerCase() === name.toLowerCase() }
         );
+      } else {
+        const df_national_all = await loadCSV(URLS.small_data_group(firstLetterGroup));
+        const df_national_name_year = df_national_all.filter(r =>
+          String(r["name"]) === name && parseInt(r["year"], 10) === yearNum
+        );
+
+        const yearCard = document.createElement("div");
+        yearCard.className = "card";
+        yearCard.innerHTML = `<h2>National Summary (${yearNum})</h2>`;
+        out.appendChild(yearCard);
+
+        let overall_rank_us = null;
+        let total_freq_us = 0;
+        let male_freq_us = 0;
+        let female_freq_us = 0;
+
+        if (df_national_name_year.length === 0) {
+          yearCard.appendChild(makeTextBlock(`No national data found for ${name} in ${yearNum}.`));
+        } else {
+          const target_name_national_agg = groupSum(
+            df_national_name_year,
+            ["name", "year", "overall_rank", "overall_percentage"],
+            "frequency"
+          );
+
+          total_freq_us = target_name_national_agg.reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
+
+          male_freq_us = df_national_name_year
+            .filter(r => String(r["sex"]) === "M")
+            .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
+
+          female_freq_us = df_national_name_year
+            .filter(r => String(r["sex"]) === "F")
+            .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
+
+          const overall_rank_us_val = (target_name_national_agg.length > 0) ? target_name_national_agg[0]["overall_rank"] : null;
+          if (overall_rank_us_val !== null && overall_rank_us_val !== undefined && String(overall_rank_us_val).trim() !== "" && String(overall_rank_us_val).toLowerCase() !== "nan") {
+            const v = Number(overall_rank_us_val);
+            if (Number.isFinite(v)) overall_rank_us = parseInt(v, 10);
+          }
+
+          const rank_str = (overall_rank_us !== null) ? ordinal(overall_rank_us) : "N/A";
+
+          const summary_text_year =
+            `There were ${total_freq_us.toLocaleString()} babies born in the US with the name ${name} in ${yearNum} ` +
+            `(${male_freq_us.toLocaleString()} M, ${female_freq_us.toLocaleString()} F).\n` +
+            `It was the ${rank_str} most popular name nationwide that year.\n` +
+            `See the tables below for more.`;
+
+          yearCard.appendChild(makeTextBlock(summary_text_year));
+
+          const df_national_top_all = await loadCSV(URLS.top_names_national_yearly);
+          const df_national_top_year = df_national_top_all.filter(r => parseInt(r["year"], 10) === yearNum);
+
+          let national_table_data = df_national_top_year.filter(r => Number(r["overall_rank"]) <= 5);
+          national_table_data = groupSum(
+            national_table_data,
+            ["name", "overall_rank", "overall_percentage"],
+            "frequency"
+          );
+          national_table_data = sortByNumericField(national_table_data, "overall_rank", true);
+
+          const target_row = target_name_national_agg.slice(0, 1).map(r => ({
+            name: r["name"],
+            frequency: r["frequency"],
+            overall_rank: r["overall_rank"],
+            overall_percentage: r["overall_percentage"]
+          }));
+
+          if (target_row.length) {
+            const target_rank = Number(target_row[0].overall_rank);
+            const inTop5 = national_table_data.some(r => toLowerTrim(r.name) === name.toLowerCase());
+
+            if (Number.isFinite(target_rank) && target_rank > 5 && !inTop5) {
+              const dots = { name: "...", frequency: "...", overall_rank: "...", overall_percentage: "..." };
+              const insert_idx = national_table_data.filter(r => {
+                const v = Number(r.overall_rank);
+                return Number.isFinite(v) && v < target_rank;
+              }).length;
+
+              national_table_data = [
+                ...national_table_data.slice(0, insert_idx),
+                dots,
+                ...target_row,
+                ...national_table_data.slice(insert_idx)
+              ];
+            } else if (!inTop5 && Number.isFinite(target_rank) && target_rank <= 5) {
+              national_table_data.push(target_row[0]);
+              national_table_data = groupSum(
+                national_table_data,
+                ["name", "overall_rank", "overall_percentage"],
+                "frequency"
+              );
+              national_table_data = sortByNumericField(national_table_data, "overall_rank", true);
+            }
+          }
+
+          const nat_rows = national_table_data.map(r => ({
+            "National Rank": r.overall_rank,
+            "Name": r.name,
+            "Frequency": (r.frequency === "...") ? "..." : (Number(r.frequency) || 0).toLocaleString(),
+            "Percentage": r.overall_percentage
+          }));
+
+          renderTable(
+            yearCard,
+            `National Popularity Table (${yearNum}):`,
+            nat_rows,
+            ["National Rank", "Name", "Frequency", "Percentage"],
+            { boldRowPredicate: (r) => String(r["Name"]).toLowerCase() === name.toLowerCase() }
+          );
+        }
       }
 
       // ============================================================
-      // 3) STATE SUMMARY (YEAR-SPECIFIC)
+      // 3) STATE SUMMARY
       // ============================================================
-      const df_state_all = await loadCSV(URLS.data_by_state_letter(firstLetter));
-
-      const df_state_name_year = df_state_all.filter(r =>
-        String(r["name"]) === name &&
-        String(r["State"]) === state &&
-        parseInt(r["year"], 10) === year
-      );
-
-      const stateFull = STATE_NAMES[state.toUpperCase()] || state;
-
+      const stateFull = hasState ? (STATE_NAMES[stateRaw] || stateRaw) : "State";
       const stateCard = document.createElement("div");
       stateCard.className = "card";
-      stateCard.innerHTML = `<h2>${stateFull} State Summary (${year})</h2>`;
+      if (hasState && hasYear) stateCard.innerHTML = `<h2>${stateFull} State Summary (${yearNum})</h2>`;
+      else if (hasState && !hasYear) stateCard.innerHTML = `<h2>${stateFull} State Summary</h2>`;
+      else if (!hasState && hasYear) stateCard.innerHTML = `<h2>State Summary (${yearNum})</h2>`;
+      else stateCard.innerHTML = `<h2>State Summary</h2>`;
       out.appendChild(stateCard);
 
-      if (df_state_name_year.length === 0) {
-        stateCard.innerHTML += `<pre>No state data found for ${name} in ${state} in ${year}.</pre>`;
-        showMessage("Done (state data missing).");
-        return;
-      }
+      if (hasState && hasYear) {
+        const df_state_all = await loadCSV(URLS.data_by_state_letter(firstLetter));
+        const df_state_name_year = df_state_all.filter(r =>
+          String(r["name"]) === name &&
+          String(r["State"]) === stateRaw &&
+          parseInt(r["year"], 10) === yearNum
+        );
 
-      const target_name_state_agg = groupSum(
-        df_state_name_year,
-        ["name", "year", "State", "overall_rank", "overall_percentage"],
-        "frequency"
-      );
+        if (df_state_name_year.length === 0) {
+          stateCard.appendChild(makeTextBlock(`No state data found for ${name} in ${stateRaw} in ${yearNum}.`));
+        } else {
+          const target_name_state_agg = groupSum(
+            df_state_name_year,
+            ["name", "year", "State", "overall_rank", "overall_percentage"],
+            "frequency"
+          );
 
-      let overall_rank_state = null;
-      const overall_rank_state_val = (target_name_state_agg.length > 0) ? target_name_state_agg[0]["overall_rank"] : null;
-      if (overall_rank_state_val !== null && overall_rank_state_val !== undefined && String(overall_rank_state_val).trim() !== "" && String(overall_rank_state_val).toLowerCase() !== "nan") {
-        const v = Number(overall_rank_state_val);
-        if (Number.isFinite(v)) overall_rank_state = parseInt(v, 10);
-      }
+          let overall_rank_state = null;
+          const overall_rank_state_val = (target_name_state_agg.length > 0) ? target_name_state_agg[0]["overall_rank"] : null;
+          if (overall_rank_state_val !== null && overall_rank_state_val !== undefined && String(overall_rank_state_val).trim() !== "" && String(overall_rank_state_val).toLowerCase() !== "nan") {
+            const v = Number(overall_rank_state_val);
+            if (Number.isFinite(v)) overall_rank_state = parseInt(v, 10);
+          }
 
-      const total_freq_state = target_name_state_agg.reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
-      const male_freq_state = df_state_name_year
-        .filter(r => String(r["sex"]) === "M")
-        .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
-      const female_freq_state = df_state_name_year
-        .filter(r => String(r["sex"]) === "F")
-        .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
+          const total_freq_state = target_name_state_agg.reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
+          const male_freq_state = df_state_name_year
+            .filter(r => String(r["sex"]) === "M")
+            .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
+          const female_freq_state = df_state_name_year
+            .filter(r => String(r["sex"]) === "F")
+            .reduce((acc, r) => acc + (Number(r["frequency"]) || 0), 0) | 0;
 
-      const rank_state_str = (overall_rank_state !== null) ? ordinal(overall_rank_state) : "N/A";
+          const rank_state_str = (overall_rank_state !== null) ? ordinal(overall_rank_state) : "N/A";
 
-      stateCard.innerHTML += `<pre>${
-        `There were ${total_freq_state.toLocaleString()} babies born in ${state} with the name ${name} in ${year} ` +
-        `(${male_freq_state.toLocaleString()} M, ${female_freq_state.toLocaleString()} F).\n` +
-        `It was the ${rank_state_str} most popular name in ${state} that year.\n` +
-        `See the tables below for more.`
-      }</pre>`;
+          const state_text =
+            `There were ${total_freq_state.toLocaleString()} babies born in ${stateRaw} with the name ${name} in ${yearNum} ` +
+            `(${male_freq_state.toLocaleString()} M, ${female_freq_state.toLocaleString()} F).\n` +
+            `It was the ${rank_state_str} most popular name in ${stateRaw} that year.\n` +
+            `See the tables below for more.`;
 
-      // State popularity table (top 5 + target row, with ellipses; columns reordered/renamed)
-      const df_state_top_all = await loadCSV(URLS.top_names_state_yearly);
-      const df_state_top_year_state = df_state_top_all.filter(r =>
-        parseInt(r["year"], 10) === year && String(r["State"]) === state
-      );
+          stateCard.appendChild(makeTextBlock(state_text));
 
-      let state_table_data = df_state_top_year_state.filter(r => Number(r["overall_rank"]) <= 5);
-      state_table_data = groupSum(
-        state_table_data,
-        ["name", "overall_rank", "overall_percentage"],
-        "frequency"
-      );
-      state_table_data = sortByNumericField(state_table_data, "overall_rank", true);
+          const df_state_top_all = await loadCSV(URLS.top_names_state_yearly);
+          const df_state_top_year_state = df_state_top_all.filter(r =>
+            parseInt(r["year"], 10) === yearNum && String(r["State"]) === stateRaw
+          );
 
-      const target_row_state = target_name_state_agg.slice(0, 1).map(r => ({
-        name: r["name"],
-        frequency: r["frequency"],
-        overall_rank: r["overall_rank"],
-        overall_percentage: r["overall_percentage"]
-      }));
-
-      if (target_row_state.length) {
-        const target_rank = Number(target_row_state[0].overall_rank);
-        const inTop5 = state_table_data.some(r => toLowerTrim(r.name) === name.toLowerCase());
-
-        if (Number.isFinite(target_rank) && target_rank > 5 && !inTop5) {
-          const dots = { name: "...", frequency: "...", overall_rank: "...", overall_percentage: "..." };
-          const insert_idx = state_table_data.filter(r => {
-            const v = Number(r.overall_rank);
-            return Number.isFinite(v) && v < target_rank;
-          }).length;
-
-          state_table_data = [
-            ...state_table_data.slice(0, insert_idx),
-            dots,
-            ...target_row_state,
-            ...state_table_data.slice(insert_idx)
-          ];
-        } else if (!inTop5 && Number.isFinite(target_rank) && target_rank <= 5) {
-          state_table_data.push(target_row_state[0]);
+          let state_table_data = df_state_top_year_state.filter(r => Number(r["overall_rank"]) <= 5);
           state_table_data = groupSum(
             state_table_data,
             ["name", "overall_rank", "overall_percentage"],
             "frequency"
           );
           state_table_data = sortByNumericField(state_table_data, "overall_rank", true);
+
+          const target_row_state = target_name_state_agg.slice(0, 1).map(r => ({
+            name: r["name"],
+            frequency: r["frequency"],
+            overall_rank: r["overall_rank"],
+            overall_percentage: r["overall_percentage"]
+          }));
+
+          if (target_row_state.length) {
+            const target_rank = Number(target_row_state[0].overall_rank);
+            const inTop5 = state_table_data.some(r => toLowerTrim(r.name) === name.toLowerCase());
+
+            if (Number.isFinite(target_rank) && target_rank > 5 && !inTop5) {
+              const dots = { name: "...", frequency: "...", overall_rank: "...", overall_percentage: "..." };
+              const insert_idx = state_table_data.filter(r => {
+                const v = Number(r.overall_rank);
+                return Number.isFinite(v) && v < target_rank;
+              }).length;
+
+              state_table_data = [
+                ...state_table_data.slice(0, insert_idx),
+                dots,
+                ...target_row_state,
+                ...state_table_data.slice(insert_idx)
+              ];
+            } else if (!inTop5 && Number.isFinite(target_rank) && target_rank <= 5) {
+              state_table_data.push(target_row_state[0]);
+              state_table_data = groupSum(
+                state_table_data,
+                ["name", "overall_rank", "overall_percentage"],
+                "frequency"
+              );
+              state_table_data = sortByNumericField(state_table_data, "overall_rank", true);
+            }
+          }
+
+          const st_rows = state_table_data.map(r => ({
+            "State Rank": r.overall_rank,
+            "Name": r.name,
+            "Frequency": (r.frequency === "...") ? "..." : (Number(r.frequency) || 0).toLocaleString(),
+            "Percentage": r.overall_percentage
+          }));
+
+          renderTable(
+            stateCard,
+            `${stateRaw} Popularity Table (${yearNum}):`,
+            st_rows,
+            ["State Rank", "Name", "Frequency", "Percentage"],
+            { boldRowPredicate: (r) => String(r["Name"]).toLowerCase() === name.toLowerCase() }
+          );
         }
       }
 
-      const st_rows = state_table_data.map(r => ({
-        "State Rank": r.overall_rank,
-        "Name": r.name,
-        "Frequency": (r.frequency === "...") ? "..." : (Number(r.frequency) || 0).toLocaleString(),
-        "Percentage": r.overall_percentage
-      }));
-
-      renderTable(
-        stateCard,
-        `${state} Popularity Table (${year}):`,
-        st_rows,
-        ["State Rank", "Name", "Frequency", "Percentage"],
-        { boldRowPredicate: (r) => String(r["Name"]).toLowerCase() === name.toLowerCase() }
-      );
-
+      // ============================================================
       // State over/underrepresentation (all-time)
+      // ============================================================
       const state_representation_df_all = await loadCSV(URLS.state_representation);
       const state_representation_df = state_representation_df_all.filter(r => String(r["name"]) === name);
 
       if (state_representation_df.length === 0) {
-        stateCard.innerHTML += `<pre>No state representation data found for name '${name}'.</pre>`;
-        showMessage("Done (representation data missing).");
+        stateCard.appendChild(makeTextBlock(`No state representation data found for name '${name}'.`));
         return;
       }
 
@@ -552,13 +873,13 @@
 
       const top3 = rep_sorted.slice(0, 3);
       const bot3 = rep_sorted.slice(-3);
-      const target_state_data = rep_sorted.filter(r => String(r["State"]) === state);
+      const target_state_data = hasState ? rep_sorted.filter(r => String(r["State"]) === stateRaw) : [];
 
       const states_to_show = new Set([
         ...top3.map(r => r["State"]),
         ...bot3.map(r => r["State"])
       ]);
-      if (target_state_data.length) states_to_show.add(state);
+      if (target_state_data.length) states_to_show.add(stateRaw);
 
       const filtered = rep_sorted
         .filter(r => states_to_show.has(r["State"]))
@@ -584,7 +905,7 @@
         final_rows.push({
           "Rank": parseInt(row["Rank"], 10),
           "State": row["State"],
-          "Frequency": parseInt(row["frequency"], 10),
+          "Frequency": (Number(row["frequency"]) || 0).toLocaleString(),
           "Percentage": Number(row["state_percentage"]).toFixed(5)
         });
         last_idx = orig_idx;
@@ -593,33 +914,31 @@
       const top_state = rep_sorted[0];
       const bottom_state = rep_sorted[rep_sorted.length - 1];
 
-      stateCard.innerHTML += `<pre>${
+      const rep_text =
         `The state where ${name} is most overrepresented (all time) is ${top_state["State"]} ` +
         `with ${Number(top_state["state_percentage"]).toFixed(5)}% of babies named ${name}.\n` +
         `It is most underrepresented in ${bottom_state["State"]} where only ` +
         `${Number(bottom_state["state_percentage"]).toFixed(5)}% of babies were named ${name}.\n` +
-        `See the tables below for more.`
-      }</pre>`;
+        `See the tables below for more.`;
+
+      stateCard.appendChild(makeTextBlock(rep_text));
 
       renderTable(
         stateCard,
         `State Over/Underrepresentation for ${name} (All Time):`,
         final_rows,
         ["Rank", "State", "Frequency", "Percentage"],
-        { boldRowPredicate: (r) => String(r["State"]).toUpperCase() === state.toUpperCase() }
+        { boldRowPredicate: (r) => hasState && String(r["State"]).toUpperCase() === stateRaw }
       );
 
-      showMessage("Done.");
     } catch (err) {
       console.error(err);
-      showMessage(`Error:\n${err?.message || String(err)}`, true);
-    } finally {
-      setLoading(false);
+      setError(`Error:\n${err?.message || String(err)}`);
     }
   }
 
   // ============================================================
-  // Wire up UI
+  // Wire up hidden button (kept for compatibility with bridge)
   // ============================================================
   document.getElementById("runBtn").addEventListener("click", () => {
     const name = document.getElementById("nameInput").value;
@@ -631,7 +950,7 @@
 </script>
 
 <script>
-  // Bridge: accept inputs from parent index.html and run without changing any calculations.
+  // Bridge: accept inputs from parent index.html and run.
   window.addEventListener("message", (event) => {
     const d = event.data || {};
     if (d.type !== "SET_INPUTS_AND_RUN") return;
@@ -640,13 +959,9 @@
     if (typeof d.state === "string") document.getElementById("stateInput").value = d.state;
     if (typeof d.year === "string") document.getElementById("yearInput").value = d.year;
 
-    // Trigger existing behavior
     document.getElementById("runBtn").click();
   });
 </script>
 
-  
 </body>
 </html>
-
-

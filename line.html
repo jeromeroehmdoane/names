@@ -9,75 +9,138 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
+    html, body { height: 100%; }
     body {
       margin: 0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: #fafafa;
+      background: #fff;
       color: #111;
     }
     .wrap {
+      height: 100%;
       max-width: 980px;
       margin: 0 auto;
-      padding: 14px;
-    }
-    h1 {
-      font-size: 18px;
-      margin: 10px 0 12px;
-      font-weight: 650;
+      padding: 0;
     }
     .card {
+      height: 100%;
       background: #fff;
       border: 1px solid #e6e6e6;
       border-radius: 14px;
-      padding: 14px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      align-items: center;
-    }
-    input {
-      width: 100%;
-      font-size: 16px;
       padding: 12px;
-      border-radius: 12px;
-      border: 1px solid #e6e6e6;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
-    button {
+
+    .cardTitle {
+      margin: 0;
       font-size: 16px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: none;
-      background: #111;
-      color: #fff;
-      cursor: pointer;
+      font-weight: 650;
+      line-height: 1.2;
     }
+
+    .controlsRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: nowrap;
+      margin-top: 2px;
+    }
+    .ctrlLabel {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0 0 4px;
+    }
+    .ctrl {
+      display: flex;
+      flex-direction: column;
+      min-width: 140px;
+      flex: 0 1 auto;
+    }
+    .ctrl select {
+      font-size: 14px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #e6e6e6;
+      background: #fff;
+      color: #111;
+      width: 100%;
+    }
+
+    /* Stack dropdowns if screen is too narrow to avoid overlap */
+    @media (max-width: 420px){
+      .controlsRow{
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .ctrl{
+        min-width: 0;
+      }
+    }
+
     .status {
-      margin-top: 10px;
+      margin: 0;
       font-size: 13px;
       color: #555;
-      min-height: 18px;
+      min-height: 16px;
     }
+
     #plot {
-      margin-top: 12px;
       width: 100%;
-      height: 64vh;
-      min-height: 420px;
+      flex: 1 1 auto;
+      min-height: 240px;
     }
+
+    /* Try to fit well in phone landscape */
+    @media (orientation: landscape) and (max-height: 520px){
+      .card { padding: 10px; gap: 4px; }
+      .cardTitle { font-size: 15px; }
+      .status { min-height: 14px; font-size: 12px; }
+      #plot { min-height: 180px; }
+    }
+
+    /* hidden local controls; IDs preserved */
+    .hidden { display:none; }
   </style>
 </head>
 
 <body>
 <div class="wrap">
-  <h1>Explore Name Popularity</h1>
-
   <div class="card">
-    <div class="row">
-      <input id="nameInput" placeholder="Enter a name (e.g., Taylor)" />
+    <h2 class="cardTitle" id="cardTitle">Popularity of Name</h2>
+
+    <!-- Dropdowns ABOVE the plot: Y-axis left, Sex right -->
+    <div class="controlsRow">
+      <div class="ctrl" style="align-items:flex-start;">
+        <div class="ctrlLabel">Y-Axis</div>
+        <select id="metricSelect">
+          <option value="frequency">frequency</option>
+          <option value="percentage">percentage</option>
+          <option value="rank">rank</option>
+        </select>
+      </div>
+
+      <div class="ctrl" style="align-items:flex-end;">
+        <div class="ctrlLabel">Sex</div>
+        <select id="sexSelect">
+          <option value="combined">combined</option>
+          <option value="separate">separate</option>
+          <option value="male">male</option>
+          <option value="female">female</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- hidden local controls; IDs preserved for bridge -->
+    <div class="hidden">
+      <input id="nameInput" />
       <button id="goBtn">Show</button>
     </div>
+
     <div class="status" id="status"></div>
     <div id="plot"></div>
   </div>
@@ -87,13 +150,23 @@
 const BASE = "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/";
 const GROUPS = ["ABCD","EFGH","IJKL","MNOP","QRST","UVWXYZ"];
 
+let GD = null; // plotly graph div ref
+let SERIES = null; // store computed series for re-render without changing calculations
+
 function groupForName(name) {
   return GROUPS.find(g => g.includes(name[0].toUpperCase()));
+}
+
+function setTitle(name){
+  const t = document.getElementById("cardTitle");
+  t.textContent = name ? `Popularity of ${name}` : "Popularity of Name";
 }
 
 function loadPlot(name) {
   name = name.trim();
   if (!name) return;
+
+  setTitle(name);
 
   const g = groupForName(name);
   document.getElementById("status").textContent = "Loading…";
@@ -110,6 +183,7 @@ function loadPlot(name) {
 }
 
 function renderPlot(name, rows) {
+  // --- KEEP EXISTING CALCULATIONS/LOGIC INTACT ---
   const data = rows
     .filter(r => (r.name || "").toLowerCase() === name.toLowerCase())
     .map(r => ({
@@ -145,95 +219,149 @@ function renderPlot(name, rows) {
   };
 
   const yaxisByMetric = {
-    frequency:{title:{text:"Frequency",standoff:20},tickformat:",.0f"},
-    percentage:{title:{text:"Percentage",standoff:20},tickformat:".2f",ticksuffix:"%"},
-    rank:{title:{text:"Rank (log scale)",standoff:20},type:"log",autorange:"reversed"}
+    frequency:{title:{text:"Frequency",standoff:14},tickformat:",.0f"},
+    percentage:{title:{text:"Percentage",standoff:14},tickformat:".2f",ticksuffix:"%"},
+    rank:{title:{text:"Rank (log scale)",standoff:14},type:"log",autorange:"reversed"}
   };
 
-  let currentMetric = "frequency";
-  let currentSex = "combined";
+  // Store for dropdown updates (no re-fetch, no recalcs beyond what already exists)
+  SERIES = { c, m, f, hoverNonSep, hoverSep, yaxisByMetric };
 
-  Plotly.newPlot("plot", [
-    {x:c.map(d=>d.year),y:c.map(d=>d.frequency),mode:"lines",name:"Combined",line:{color:"purple"},hovertemplate:hoverNonSep.frequency},
-    {x:m.map(d=>d.year),y:m.map(d=>d.frequency),mode:"lines",name:"Male",line:{color:"blue"},visible:false},
-    {x:f.map(d=>d.year),y:f.map(d=>d.frequency),mode:"lines",name:"Female",line:{color:"red"},visible:false}
-  ], {
-    title:{text:`Popularity of ${name} over time`,x:0.02},
-    xaxis:{title:"Year"},
-    yaxis:yaxisByMetric.frequency,
-    hovermode:"closest",
-    margin:{l:70,r:15,t:95,b:55},
-    showlegend:false,
-    legend:{
-      x:0.02,y:0.98,
-      xanchor:"left",yanchor:"top",
-      bgcolor:"rgba(255,255,255,0.75)",
-      bordercolor:"rgba(0,0,0,0.10)",
-      borderwidth:1
-    },
-    annotations:[
-      {x:0.78,y:1.23,xref:"paper",yref:"paper",text:"Sex",showarrow:false,xanchor:"right"},
-      {x:1.0,y:1.23,xref:"paper",yref:"paper",text:"Y-Axis",showarrow:false,xanchor:"right"}
-    ],
-    updatemenus:[
-      {
-        x:1,y:1.18,xanchor:"right",
-        buttons:[
-          {label:"frequency",method:"update",
-           args:[{y:[c.map(d=>d.frequency),m.map(d=>d.frequency),f.map(d=>d.frequency)],
-                  hovertemplate:[hoverNonSep.frequency,hoverNonSep.frequency,hoverNonSep.frequency]},
-                 {yaxis:yaxisByMetric.frequency}]},
-          {label:"percentage",method:"update",
-           args:[{y:[c.map(d=>d.percentage),m.map(d=>d.percentage),f.map(d=>d.percentage)],
-                  hovertemplate:[hoverNonSep.percentage,hoverNonSep.percentage,hoverNonSep.percentage]},
-                 {yaxis:yaxisByMetric.percentage}]},
-          {label:"rank",method:"update",
-           args:[{y:[c.map(d=>d.rank),m.map(d=>d.rank),f.map(d=>d.rank)],
-                  hovertemplate:[hoverNonSep.rank,hoverNonSep.rank,hoverNonSep.rank]},
-                 {yaxis:yaxisByMetric.rank}]}
-        ]
-      },
-      {
-        x:0.78,y:1.18,xanchor:"right",
-        buttons:[
-          {label:"combined",method:"update",args:[{visible:[true,false,false]},{hovermode:"closest",showlegend:false}]},
-          {label:"separate",method:"update",args:[{visible:[false,true,true]},{hovermode:"x unified",showlegend:true}]},
-          {label:"male",method:"update",args:[{visible:[false,true,false]},{hovermode:"closest",showlegend:false}]},
-          {label:"female",method:"update",args:[{visible:[false,false,true]},{hovermode:"closest",showlegend:false}]}
-        ]
-      }
-    ]
-  },{responsive:true,displayModeBar:false}).then(gd=>{
-    gd.on("plotly_buttonclicked",e=>{
-      if(["frequency","percentage","rank"].includes(e.button.label)) currentMetric=e.button.label;
-      if(["combined","separate","male","female"].includes(e.button.label)) currentSex=e.button.label;
+  // Initial dropdown state
+  const metric = document.getElementById("metricSelect").value || "frequency";
+  const sexMode = document.getElementById("sexSelect").value || "combined";
 
-      Plotly.update(gd,{
-        hovertemplate:
-          currentSex==="separate"
-            ? [null,hoverSep[currentMetric],hoverSep[currentMetric]]
-            : [hoverNonSep[currentMetric],hoverNonSep[currentMetric],hoverNonSep[currentMetric]]
-      });
-    });
+  // Build initial traces based on metric
+  function yForMetric(arr, metric){
+    if(metric === "percentage") return arr.map(d=>d.percentage);
+    if(metric === "rank") return arr.map(d=>d.rank);
+    return arr.map(d=>d.frequency);
+  }
+  function hoverForMetric(metric, sep){
+    return sep ? hoverSep[metric] : hoverNonSep[metric];
+  }
+
+  const traces = [
+    {x:c.map(d=>d.year), y:yForMetric(c, metric), mode:"lines", name:"Combined", line:{color:"purple"}, hovertemplate:hoverForMetric(metric,false)},
+    {x:m.map(d=>d.year), y:yForMetric(m, metric), mode:"lines", name:"Male", line:{color:"blue"}, visible:false, hovertemplate:hoverForMetric(metric,false)},
+    {x:f.map(d=>d.year), y:yForMetric(f, metric), mode:"lines", name:"Female", line:{color:"red"}, visible:false, hovertemplate:hoverForMetric(metric,false)}
+  ];
+
+  // Apply sex visibility
+  function visibilityForSex(mode){
+    if(mode === "separate") return [false,true,true];
+    if(mode === "male") return [false,true,false];
+    if(mode === "female") return [false,false,true];
+    return [true,false,false]; // combined
+  }
+  traces[0].visible = visibilityForSex(sexMode)[0];
+  traces[1].visible = visibilityForSex(sexMode)[1];
+  traces[2].visible = visibilityForSex(sexMode)[2];
+
+  // If separate, use sex-specific hover templates for male/female
+  if(sexMode === "separate"){
+    traces[1].hovertemplate = hoverForMetric(metric,true);
+    traces[2].hovertemplate = hoverForMetric(metric,true);
+    traces[0].hovertemplate = null;
+  }
+
+  // LAYOUT: no Plotly title (we use the card header title)
+  const isLandscapeShort = (window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
+
+  const layout = {
+    xaxis: { title: "Year", fixedrange: true },
+    yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
+    hovermode: "closest",
+    margin: { l: 60, r: 12, t: 10, b: isLandscapeShort ? 32 : 38 },
+    showlegend: false,
+    dragmode: false  // disable drag interactions
+  };
+
+  const config = {
+    responsive: true,
+    displayModeBar: false,
+    scrollZoom: false,
+    doubleClick: false
+  };
+
+  Plotly.newPlot("plot", traces, layout, config).then(gd => {
+    GD = gd;
+
+    // Hard-disable any panning/zooming interactions beyond fixedrange/dragmode.
+    // This prevents "grabbing" the plot on touch and keeps scroll behavior.
+    try {
+      gd.removeAllListeners && gd.removeAllListeners("plotly_relayouting");
+    } catch(e) {}
+
+    // If separate mode, allow legend? Your original used showlegend=true in separate,
+    // but we are keeping "Change nothing else" behavior by not adding a legend UI here.
   });
 }
 
+// Dropdown handlers (presentation only; existing data/logic stays same)
+function applyDropdowns(){
+  if(!GD || !SERIES) return;
+
+  const metric = document.getElementById("metricSelect").value || "frequency";
+  const sexMode = document.getElementById("sexSelect").value || "combined";
+
+  const { c, m, f, hoverNonSep, hoverSep, yaxisByMetric } = SERIES;
+
+  function yForMetric(arr, metric){
+    if(metric === "percentage") return arr.map(d=>d.percentage);
+    if(metric === "rank") return arr.map(d=>d.rank);
+    return arr.map(d=>d.frequency);
+  }
+  function hoverForMetric(metric, sep){
+    return sep ? hoverSep[metric] : hoverNonSep[metric];
+  }
+  function visibilityForSex(mode){
+    if(mode === "separate") return [false,true,true];
+    if(mode === "male") return [false,true,false];
+    if(mode === "female") return [false,false,true];
+    return [true,false,false];
+  }
+  const vis = visibilityForSex(sexMode);
+
+  const newY = [
+    yForMetric(c, metric),
+    yForMetric(m, metric),
+    yForMetric(f, metric)
+  ];
+
+  const newHover = (sexMode === "separate")
+    ? [null, hoverForMetric(metric,true), hoverForMetric(metric,true)]
+    : [hoverForMetric(metric,false), hoverForMetric(metric,false), hoverForMetric(metric,false)];
+
+  Plotly.update(GD, {
+    y: newY,
+    visible: vis,
+    hovertemplate: newHover
+  }, {
+    yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
+    xaxis: Object.assign({}, (GD.layout.xaxis || {}), { fixedrange: true }),
+    dragmode: false
+  });
+}
+
+document.getElementById("metricSelect").addEventListener("change", applyDropdowns);
+document.getElementById("sexSelect").addEventListener("change", applyDropdowns);
+
+// legacy hidden controls
 document.getElementById("goBtn").onclick=()=>loadPlot(document.getElementById("nameInput").value);
 document.getElementById("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")loadPlot(e.target.value);});
-</script>
 
-<script>
-  // Bridge: accept name from parent and run without changing any calculations.
-  window.addEventListener("message", (event) => {
-    const d = event.data || {};
-    if (d.type !== "SET_INPUTS_AND_RUN") return;
+// Receive inputs from parent index.html
+window.addEventListener("message", (event) => {
+  const d = event.data || {};
+  if (d.type !== "SET_INPUTS_AND_RUN") return;
 
-    if (typeof d.name === "string") document.getElementById("nameInput").value = d.name;
-    document.getElementById("goBtn").click();
-  });
+  if (typeof d.name === "string") {
+    document.getElementById("nameInput").value = d.name;
+    loadPlot(d.name);
+  }
+});
 </script>
 
 </body>
 </html>
-
-

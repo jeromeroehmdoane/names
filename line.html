@@ -10,101 +10,96 @@
 
   <style>
     html, body { height: 100%; }
-    body {
-      margin: 0;
+    body{
+      margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: #fff;
-      color: #111;
+      background:#fff;
+      color:#111;
     }
-    .wrap {
-      height: 100%;
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 0;
+    .wrap{
+      height:100%;
+      max-width:980px;
+      margin:0 auto;
+      padding:0;
     }
-    .card {
-      height: 100%;
-      background: #fff;
-      border: 1px solid #e6e6e6;
-      border-radius: 14px;
-      padding: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .cardTitle {
-      margin: 0;
-      font-size: 16px;
-      font-weight: 650;
-      line-height: 1.2;
+    .card{
+      height:100%;
+      background:#fff;
+      border:1px solid #e6e6e6;
+      border-radius:14px;
+      padding:12px;
+      box-shadow:0 1px 2px rgba(0,0,0,0.04);
+      box-sizing:border-box;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
     }
 
-    .controlsRow {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: nowrap;
-      margin-top: 2px;
-    }
-    .ctrlLabel {
-      font-size: 12px;
-      color: #6b7280;
-      margin: 0 0 4px;
-    }
-    .ctrl {
-      display: flex;
-      flex-direction: column;
-      min-width: 140px;
-      flex: 0 1 auto;
-    }
-    .ctrl select {
-      font-size: 14px;
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid #e6e6e6;
-      background: #fff;
-      color: #111;
-      width: 100%;
+    .cardTitle{
+      margin:0;
+      font-size:16px;
+      font-weight:650;
+      line-height:1.2;
     }
 
-    /* Stack dropdowns if screen is too narrow to avoid overlap */
+    .controlsRow{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:10px;
+      flex-wrap:nowrap;
+      margin-top:2px;
+    }
+    .ctrl{
+      display:flex;
+      flex-direction:column;
+      min-width:140px;
+      max-width:48%;
+    }
+    .ctrlLabel{
+      font-size:12px;
+      color:#6b7280;
+      margin:0 0 4px;
+      white-space:nowrap;
+    }
+    select{
+      font-size:14px;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid #e6e6e6;
+      background:#fff;
+      color:#111;
+      width:100%;
+    }
+    /* If screen is too narrow, stack to avoid overlap */
     @media (max-width: 420px){
-      .controlsRow{
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .ctrl{
-        min-width: 0;
-      }
+      .controlsRow{ flex-direction:column; align-items:stretch; }
+      .ctrl{ max-width:100%; min-width:0; }
     }
 
-    .status {
-      margin: 0;
-      font-size: 13px;
-      color: #555;
-      min-height: 16px;
+    .status{
+      margin:0;
+      font-size:13px;
+      color:#555;
+      min-height:16px;
     }
 
-    #plot {
-      width: 100%;
-      flex: 1 1 auto;
-      min-height: 240px;
+    #plot{
+      width:100%;
+      flex:1 1 auto;
+      min-height:240px;
     }
 
-    /* Try to fit well in phone landscape */
+    /* Mobile landscape: force plot to fit in view */
     @media (orientation: landscape) and (max-height: 520px){
-      .card { padding: 10px; gap: 4px; }
-      .cardTitle { font-size: 15px; }
-      .status { min-height: 14px; font-size: 12px; }
-      #plot { min-height: 180px; }
+      .card{ padding:10px; gap:4px; }
+      .cardTitle{ font-size:15px; }
+      .status{ min-height:14px; font-size:12px; }
+      #plot{ min-height:160px; max-height:62vh; }
+      select{ padding:7px 9px; font-size:13px; }
     }
 
-    /* hidden local controls; IDs preserved */
-    .hidden { display:none; }
+    .hidden{ display:none; }
   </style>
 </head>
 
@@ -150,21 +145,20 @@
 const BASE = "https://raw.githubusercontent.com/jeromeroehmdoane/names/refs/heads/main/";
 const GROUPS = ["ABCD","EFGH","IJKL","MNOP","QRST","UVWXYZ"];
 
-let GD = null; // plotly graph div ref
-let SERIES = null; // store computed series for re-render without changing calculations
+let GD = null;
+let SERIES = null;
 
-function groupForName(name) {
+function groupForName(name){
   return GROUPS.find(g => g.includes(name[0].toUpperCase()));
 }
 
 function setTitle(name){
-  const t = document.getElementById("cardTitle");
-  t.textContent = name ? `Popularity of ${name}` : "Popularity of Name";
+  document.getElementById("cardTitle").textContent = name ? `Popularity of ${name}` : "Popularity of Name";
 }
 
-function loadPlot(name) {
-  name = name.trim();
-  if (!name) return;
+function loadPlot(name){
+  name = (name || "").trim();
+  if(!name) return;
 
   setTitle(name);
 
@@ -182,41 +176,67 @@ function loadPlot(name) {
   });
 }
 
-function renderPlot(name, rows) {
-  // --- KEEP EXISTING CALCULATIONS/LOGIC INTACT ---
-  const data = rows
+function renderPlot(name, rows){
+  // Data model per your clarification:
+  // - No "C" rows.
+  // - percentage is sex-specific (M or F).
+  // - overall_percentage is the combined percentage (same value on M/F rows).
+  // - overall_rank is the combined rank (same value on M/F rows).
+  const filtered = rows
     .filter(r => (r.name || "").toLowerCase() === name.toLowerCase())
     .map(r => ({
       year: +r.year,
       sex: (r.sex || "").trim(),
       frequency: +r.frequency,
       percentage: +r.percentage,
+      overall_percentage: +r.overall_percentage,
+      overall_rank: +r.overall_rank,
       rank: +r.rank
     }))
-    .filter(r => Number.isFinite(r.year) && r.rank >= 1);
+    .filter(r => Number.isFinite(r.year));
 
-  const m = data.filter(r => r.sex === "M").sort((a,b)=>a.year-b.year);
-  const f = data.filter(r => r.sex === "F").sort((a,b)=>a.year-b.year);
+  const m = filtered.filter(r => r.sex === "M").sort((a,b)=>a.year-b.year);
+  const f = filtered.filter(r => r.sex === "F").sort((a,b)=>a.year-b.year);
 
+  // Build combined series:
+  // - frequency: M + F (by year)
+  // - overall_percentage: take from either sex row (they match)
+  // - overall_rank: take from either sex row (they match)
   const combinedMap = {};
-  data.forEach(r => {
-    if (!combinedMap[r.year]) combinedMap[r.year] = { year:r.year, frequency:0, percentage:0, rank:r.rank };
-    combinedMap[r.year].frequency += r.frequency;
-    combinedMap[r.year].percentage += r.percentage;
-    combinedMap[r.year].rank = Math.min(combinedMap[r.year].rank, r.rank);
-  });
+  function upsert(arr){
+    arr.forEach(r => {
+      if(!combinedMap[r.year]){
+        combinedMap[r.year] = {
+          year: r.year,
+          frequency: 0,
+          overall_percentage: r.overall_percentage,
+          overall_rank: r.overall_rank
+        };
+      }
+      combinedMap[r.year].frequency += (Number.isFinite(r.frequency) ? r.frequency : 0);
+      // Keep overall_* (same on both rows); but if missing on first, allow overwrite with numeric
+      if (Number.isFinite(r.overall_percentage)) combinedMap[r.year].overall_percentage = r.overall_percentage;
+      if (Number.isFinite(r.overall_rank)) combinedMap[r.year].overall_rank = r.overall_rank;
+    });
+  }
+  upsert(m); upsert(f);
   const c = Object.values(combinedMap).sort((a,b)=>a.year-b.year);
 
-  const hoverNonSep = {
-    frequency: "%{x}<br>Frequency: %{y:,.0f}<extra></extra>",
-    percentage: "%{x}<br>Percentage: %{y:.2f}%<extra></extra>",
-    rank: "%{x}<br>Rank: %{y:,.0f}<extra></extra>"
-  };
-  const hoverSep = {
-    frequency: "Frequency: %{y:,.0f}<extra></extra>",
-    percentage: "Percentage: %{y:.2f}%<extra></extra>",
-    rank: "Rank: %{y:,.0f}<extra></extra>"
-  };
+  // Hover templates:
+  // - Always include Year
+  // - In separate mode, include year + line with Rank/Frequency/Percentage
+  const hover = {
+  combined: {
+    frequency: "Year: %{x}<br>Frequency: %{y:,.0f}<extra></extra>",
+    percentage: "Year: %{x}<br>Percentage: %{y:.2f}%<extra></extra>",
+    rank: "Year: %{x}<br>Rank: %{y:,.0f}<extra></extra>"
+  },
+  sexSpecific: {
+    frequency: "Year: %{x}<br>%{fullData.name} Frequency: %{y:,.0f}<extra></extra>",
+    percentage: "Year: %{x}<br>%{fullData.name} Percentage: %{y:.2f}%<extra></extra>",
+    rank: "Year: %{x}<br>%{fullData.name} Rank: %{y:,.0f}<extra></extra>"
+  }
+};
 
   const yaxisByMetric = {
     frequency:{title:{text:"Frequency",standoff:14},tickformat:",.0f"},
@@ -224,59 +244,108 @@ function renderPlot(name, rows) {
     rank:{title:{text:"Rank (log scale)",standoff:14},type:"log",autorange:"reversed"}
   };
 
-  // Store for dropdown updates (no re-fetch, no recalcs beyond what already exists)
-  SERIES = { c, m, f, hoverNonSep, hoverSep, yaxisByMetric };
+  SERIES = { c, m, f, hover, yaxisByMetric };
 
-  // Initial dropdown state
+  // Initialize plot from dropdown state
+  rebuildPlotFromState();
+}
+
+function yFor(arr, metric, mode){
+  // mode in {"combined","male","female","separate"}
+  if(metric === "frequency"){
+    return arr.map(d => d.frequency);
+  }
+  if(metric === "percentage"){
+    // combined uses overall_percentage; sex-specific uses percentage
+    if(mode === "combined") return arr.map(d => d.overall_percentage);
+    return arr.map(d => d.percentage);
+  }
+  // rank metric:
+  // combined uses overall_rank; sex-specific uses rank
+  if(mode === "combined") return arr.map(d => d.overall_rank);
+  return arr.map(d => d.rank);
+}
+
+function visibilityForSex(mode){
+  if(mode === "separate") return [false,true,true];
+  if(mode === "male") return [false,true,false];
+  if(mode === "female") return [false,false,true];
+  return [true,false,false]; // combined
+}
+
+function rebuildPlotFromState(){
+  if(!SERIES) return;
+
   const metric = document.getElementById("metricSelect").value || "frequency";
   const sexMode = document.getElementById("sexSelect").value || "combined";
 
-  // Build initial traces based on metric
-  function yForMetric(arr, metric){
-    if(metric === "percentage") return arr.map(d=>d.percentage);
-    if(metric === "rank") return arr.map(d=>d.rank);
-    return arr.map(d=>d.frequency);
-  }
-  function hoverForMetric(metric, sep){
-    return sep ? hoverSep[metric] : hoverNonSep[metric];
-  }
+  const { c, m, f, hover, yaxisByMetric } = SERIES;
 
   const traces = [
-    {x:c.map(d=>d.year), y:yForMetric(c, metric), mode:"lines", name:"Combined", line:{color:"purple"}, hovertemplate:hoverForMetric(metric,false)},
-    {x:m.map(d=>d.year), y:yForMetric(m, metric), mode:"lines", name:"Male", line:{color:"blue"}, visible:false, hovertemplate:hoverForMetric(metric,false)},
-    {x:f.map(d=>d.year), y:yForMetric(f, metric), mode:"lines", name:"Female", line:{color:"red"}, visible:false, hovertemplate:hoverForMetric(metric,false)}
+    {
+      x: c.map(d=>d.year),
+      y: yFor(c, metric, "combined"),
+      mode:"lines",
+      name:"Combined",
+      line:{color:"purple"},
+      hovertemplate: hover.combined[metric]
+    },
+    {
+      x: m.map(d=>d.year),
+      y: yFor(m, metric, "male"),
+      mode:"lines",
+      name:"Male",
+      line:{color:"blue"},
+      visible:false,
+      hovertemplate: hover.combined[metric] // overwritten for separate
+    },
+    {
+      x: f.map(d=>d.year),
+      y: yFor(f, metric, "female"),
+      mode:"lines",
+      name:"Female",
+      line:{color:"red"},
+      visible:false,
+      hovertemplate: hover.combined[metric] // overwritten for separate
+    }
   ];
 
-  // Apply sex visibility
-  function visibilityForSex(mode){
-    if(mode === "separate") return [false,true,true];
-    if(mode === "male") return [false,true,false];
-    if(mode === "female") return [false,false,true];
-    return [true,false,false]; // combined
-  }
-  traces[0].visible = visibilityForSex(sexMode)[0];
-  traces[1].visible = visibilityForSex(sexMode)[1];
-  traces[2].visible = visibilityForSex(sexMode)[2];
+  const vis = visibilityForSex(sexMode);
+  traces[0].visible = vis[0];
+  traces[1].visible = vis[1];
+  traces[2].visible = vis[2];
 
-  // If separate, use sex-specific hover templates for male/female
+  // Hover behavior:
+  // - For separate: include year + sex label (Male/Female via fullData.name)
+  // - For male/female: treat like combined-style hover (year included)
   if(sexMode === "separate"){
-    traces[1].hovertemplate = hoverForMetric(metric,true);
-    traces[2].hovertemplate = hoverForMetric(metric,true);
     traces[0].hovertemplate = null;
+    traces[1].hovertemplate = hover.sexSpecific[metric];
+    traces[2].hovertemplate = hover.sexSpecific[metric];
+  } else {
+    traces[0].hovertemplate = hover.combined[metric];
+    traces[1].hovertemplate = hover.combined[metric];
+    traces[2].hovertemplate = hover.combined[metric];
   }
 
-  // LAYOUT: no Plotly title (we use the card header title)
   const isLandscapeShort = (window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
 
   const layout = {
+    // No Plotly title; title is in the card header
     xaxis: { title: "Year", fixedrange: true },
     yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
     hovermode: "closest",
-    margin: { l: 60, r: 12, t: 10, b: isLandscapeShort ? 32 : 38 },
+    margin: { l: 60, r: 12, t: 10, b: isLandscapeShort ? 30 : 38 },
     showlegend: false,
-    dragmode: false  // disable drag interactions
+    dragmode: false
   };
 
+  // Completely disable motion while keeping hover:
+  // - fixedrange on axes
+  // - dragmode false
+  // - scrollZoom false
+  // - doubleClick false
+  // - displayModeBar false
   const config = {
     responsive: true,
     displayModeBar: false,
@@ -287,69 +356,57 @@ function renderPlot(name, rows) {
   Plotly.newPlot("plot", traces, layout, config).then(gd => {
     GD = gd;
 
-    // Hard-disable any panning/zooming interactions beyond fixedrange/dragmode.
-    // This prevents "grabbing" the plot on touch and keeps scroll behavior.
+    // Extra safety: prevent touch/drag from initiating plot interactions.
+    // Hover still works; vertical swipes scroll the page.
     try {
-      gd.removeAllListeners && gd.removeAllListeners("plotly_relayouting");
+      gd.on("plotly_relayouting", () => false);
     } catch(e) {}
-
-    // If separate mode, allow legend? Your original used showlegend=true in separate,
-    // but we are keeping "Change nothing else" behavior by not adding a legend UI here.
   });
 }
 
-// Dropdown handlers (presentation only; existing data/logic stays same)
 function applyDropdowns(){
-  if(!GD || !SERIES) return;
+  if(!GD || !SERIES){
+    // If plot isn't built yet, ignore
+    return;
+  }
 
   const metric = document.getElementById("metricSelect").value || "frequency";
   const sexMode = document.getElementById("sexSelect").value || "combined";
 
-  const { c, m, f, hoverNonSep, hoverSep, yaxisByMetric } = SERIES;
-
-  function yForMetric(arr, metric){
-    if(metric === "percentage") return arr.map(d=>d.percentage);
-    if(metric === "rank") return arr.map(d=>d.rank);
-    return arr.map(d=>d.frequency);
-  }
-  function hoverForMetric(metric, sep){
-    return sep ? hoverSep[metric] : hoverNonSep[metric];
-  }
-  function visibilityForSex(mode){
-    if(mode === "separate") return [false,true,true];
-    if(mode === "male") return [false,true,false];
-    if(mode === "female") return [false,false,true];
-    return [true,false,false];
-  }
-  const vis = visibilityForSex(sexMode);
+  const { c, m, f, hover, yaxisByMetric } = SERIES;
 
   const newY = [
-    yForMetric(c, metric),
-    yForMetric(m, metric),
-    yForMetric(f, metric)
+    yFor(c, metric, "combined"),
+    yFor(m, metric, "male"),
+    yFor(f, metric, "female")
   ];
 
+  const vis = visibilityForSex(sexMode);
+
   const newHover = (sexMode === "separate")
-    ? [null, hoverForMetric(metric,true), hoverForMetric(metric,true)]
-    : [hoverForMetric(metric,false), hoverForMetric(metric,false), hoverForMetric(metric,false)];
+    ? [null, hover.sexSpecific[metric], hover.sexSpecific[metric]]
+    : [hover.combined[metric], hover.combined[metric], hover.combined[metric]];
+
+  const isLandscapeShort = (window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
 
   Plotly.update(GD, {
     y: newY,
     visible: vis,
     hovertemplate: newHover
   }, {
-    yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
     xaxis: Object.assign({}, (GD.layout.xaxis || {}), { fixedrange: true }),
-    dragmode: false
+    yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
+    dragmode: false,
+    margin: Object.assign({}, (GD.layout.margin || {}), { b: isLandscapeShort ? 30 : 38 })
   });
 }
 
 document.getElementById("metricSelect").addEventListener("change", applyDropdowns);
 document.getElementById("sexSelect").addEventListener("change", applyDropdowns);
 
-// legacy hidden controls
-document.getElementById("goBtn").onclick=()=>loadPlot(document.getElementById("nameInput").value);
-document.getElementById("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")loadPlot(e.target.value);});
+// Hidden legacy controls (kept for bridge)
+document.getElementById("goBtn").onclick = () => loadPlot(document.getElementById("nameInput").value);
+document.getElementById("nameInput").addEventListener("keydown", e => { if(e.key === "Enter") loadPlot(e.target.value); });
 
 // Receive inputs from parent index.html
 window.addEventListener("message", (event) => {
@@ -360,6 +417,11 @@ window.addEventListener("message", (event) => {
     document.getElementById("nameInput").value = d.name;
     loadPlot(d.name);
   }
+});
+
+// Optional: when orientation changes, keep plot fitting nicely
+window.addEventListener("orientationchange", () => {
+  try { setTimeout(() => { if(SERIES) rebuildPlotFromState(); }, 200); } catch(e) {}
 });
 </script>
 

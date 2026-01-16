@@ -670,8 +670,7 @@
           const summary_text_year =
             `There were ${total_freq_us.toLocaleString()} babies born in the US with the name ${name} in ${yearNum} ` +
             `(${male_freq_us.toLocaleString()} M, ${female_freq_us.toLocaleString()} F).\n` +
-            `It was the ${rank_str} most popular name nationwide that year.\n` +
-            `See the tables below for more.`;
+            `It was the ${rank_str} most popular name nationwide that year.`;
 
           yearCard.appendChild(makeTextBlock(summary_text_year));
 
@@ -787,8 +786,7 @@
           const state_text =
             `There were ${total_freq_state.toLocaleString()} babies born in ${stateRaw} with the name ${name} in ${yearNum} ` +
             `(${male_freq_state.toLocaleString()} M, ${female_freq_state.toLocaleString()} F).\n` +
-            `It was the ${rank_state_str} most popular name in ${stateRaw} that year.\n` +
-            `See the tables below for more.`;
+            `It was the ${rank_state_str} most popular name in ${stateRaw} that year.`;
 
           stateCard.appendChild(makeTextBlock(state_text));
 
@@ -918,8 +916,7 @@
         `The state where ${name} is most overrepresented (all time) is ${top_state["State"]} ` +
         `with ${Number(top_state["state_percentage"]).toFixed(5)}% of babies named ${name}.\n` +
         `It is most underrepresented in ${bottom_state["State"]} where only ` +
-        `${Number(bottom_state["state_percentage"]).toFixed(5)}% of babies were named ${name}.\n` +
-        `See the tables below for more.`;
+        `${Number(bottom_state["state_percentage"]).toFixed(5)}% of babies were named ${name}.`;
 
       stateCard.appendChild(makeTextBlock(rep_text));
 
@@ -962,6 +959,56 @@
     document.getElementById("runBtn").click();
   });
 </script>
+
+<script>
+  const FRAME_ID = "frameSummary";
+
+  function _iframeDocHeight(){
+    const de = document.documentElement;
+    const b  = document.body;
+    return Math.max(
+      de ? de.scrollHeight : 0,
+      de ? de.offsetHeight : 0,
+      b  ? b.scrollHeight  : 0,
+      b  ? b.offsetHeight  : 0
+    ) || 0;
+  }
+
+  function reportHeight(){
+    const h = _iframeDocHeight();
+    window.parent.postMessage({ type: "REPORT_IFRAME_HEIGHT", frameId: FRAME_ID, height: h }, "*");
+  }
+
+  window.addEventListener("message", (e) => {
+    if(e.data && e.data.type === "REQUEST_IFRAME_HEIGHT") reportHeight();
+  });
+
+  window.addEventListener("load", () => {
+    reportHeight();
+    setTimeout(reportHeight, 150);
+    setTimeout(reportHeight, 600);
+    setTimeout(reportHeight, 1200);
+  });
+
+  // Helps catch dynamic updates (tables being rewritten, Plotly relayouts, etc.)
+  const mo = new MutationObserver(() => reportHeight());
+  mo.observe(document.documentElement, { childList:true, subtree:true, attributes:true, characterData:true });
+
+function reportHeightSoon(){
+    reportHeight();
+    setTimeout(reportHeight, 120);
+    setTimeout(reportHeight, 300);
+  }
+
+  window.addEventListener("resize", reportHeightSoon);
+  window.addEventListener("orientationchange", () => setTimeout(reportHeightSoon, 180));
+
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", reportHeightSoon);
+    window.visualViewport.addEventListener("scroll", reportHeightSoon);
+  }
+</script>
+
 
 </body>
 </html>

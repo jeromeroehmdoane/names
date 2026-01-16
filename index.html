@@ -30,7 +30,6 @@
     }
     .wrap{max-width:1120px;margin:0 auto;padding:18px 14px 40px}
 
-    /* Header is static (not sticky) */
     .header{
       border:1px solid var(--border);
       background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05));
@@ -59,7 +58,6 @@
       outline:none;
     }
 
-    /* Remove spinner arrows for year input (and any number inputs) */
     input[type="number"]::-webkit-outer-spin-button,
     input[type="number"]::-webkit-inner-spin-button{
       -webkit-appearance: none;
@@ -108,14 +106,9 @@
       border:0;
       display:block;
       background:#fff;
+      overflow:hidden; /* no internal scrolling */
     }
 
-    /* Default heights (tune anytime) */
-    #frameSummary{height:980px;}
-    #frameLine{height:640px;}
-    #frameMap{height:780px;}
-
-    /* Footer card body */
     .footerBody{
       padding:14px;
       color:var(--text);
@@ -135,9 +128,6 @@
     }
     @media (max-width: 620px){
       .controls{grid-template-columns:1fr;}
-      #frameSummary{height:1100px;}
-      #frameLine{height:720px;}
-      #frameMap{height:860px;}
     }
   </style>
 </head>
@@ -158,7 +148,6 @@
         </div>
         <div>
           <label for="year">Year <span class="muted">(Optional)</span></label>
-          <!-- use type="text" + inputmode numeric to avoid arrows everywhere -->
           <input id="year" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g., 2010" />
         </div>
         <div>
@@ -174,7 +163,7 @@
           <p class="cardTitle">Summary</p>
         </div>
         <div class="cardBody">
-          <iframe id="frameSummary" src="textSummary.html" title="Summary"></iframe>
+          <iframe id="frameSummary" src="textSummary.html" title="Summary" scrolling="no"></iframe>
         </div>
       </section>
 
@@ -183,7 +172,7 @@
           <p class="cardTitle">National Trend Over Time</p>
         </div>
         <div class="cardBody">
-          <iframe id="frameLine" src="line.html" title="Line chart"></iframe>
+          <iframe id="frameLine" src="line.html" title="Line chart" scrolling="no"></iframe>
         </div>
       </section>
 
@@ -192,48 +181,58 @@
           <p class="cardTitle">State Map Over Time</p>
         </div>
         <div class="cardBody">
-          <iframe id="frameMap" src="map.html" title="Map"></iframe>
+          <iframe id="frameMap" src="map.html" title="Map" scrolling="no"></iframe>
         </div>
       </section>
 
-      <!-- Footer/info card -->
       <section class="card">
-  <div class="cardHeader">
-    <p class="cardTitle">About</p>
-  </div>
-  <div class="footerBody">
-    <div>
-      <strong>Data source:</strong>
-      <a href="https://www.ssa.gov/oact/babynames/limits.html" target="_blank" rel="noopener">
-        https://www.ssa.gov/oact/babynames/limits.html
-      </a>
-      <span class="muted">
-          (Note: Names with fewer than 5 births in a given year are not included and default to zero)
-      </span>
-    </div>
+        <div class="cardHeader">
+          <p class="cardTitle">About</p>
+        </div>
+        <div class="footerBody">
+          <div>
+            <strong>Data source:</strong>
+            <a href="https://www.ssa.gov/oact/babynames/limits.html" target="_blank" rel="noopener">
+              https://www.ssa.gov/oact/babynames/limits.html
+            </a>
+            <span class="muted">
+              (Note: Names with fewer than 5 births in a given year are not included and default to zero)
+            </span>
+          </div>
 
-    <div style="margin-top:8px;">
-      <strong>Poster:</strong> <span class="muted">(Coming Soon)</span>
-    </div>
+          <div style="margin-top:8px;">
+            <strong>Poster:</strong> <span class="muted">(Coming Soon)</span>
+          </div>
 
-    <div>
-      <strong>Paper:</strong> <span class="muted">(Coming Soon)</span>
-    </div>
+          <div>
+            <strong>Paper:</strong> <span class="muted">(Coming Soon)</span>
+          </div>
 
-    <div style="margin-top:8px;">
-      <strong>Questions or cool ideas?:</strong>
-      Email
-      <a href="mailto:pablo.rodriguez@doane.edu">pablo.rodriguez@doane.edu</a>
-      and
-      <a href="mailto:jerome.roehm@doane.edu">jerome.roehm@doane.edu</a>
-    </div>
-  </div>
-</section>
+          <div style="margin-top:8px;">
+            <strong>Questions or cool ideas?:</strong>
+            Email
+            <a href="mailto:pablo.rodriguez@doane.edu">pablo.rodriguez@doane.edu</a>
+            and
+            <a href="mailto:jerome.roehm@doane.edu">jerome.roehm@doane.edu</a>
+          </div>
+        </div>
+      </section>
 
     </div>
   </div>
 
   <script>
+    // ============================================================
+    // MANUAL HEIGHT CONTROL (edit these)
+    // ============================================================
+    // Summary is allowed to shrink small before a name is entered, then it grows.
+    // Line + Map will NEVER be shorter than these values (but can grow if needed).
+    const MIN_HEIGHTS = {
+      frameSummary: 140,   // compact starting point (auto-expands)
+      frameLine: 480,      // <-- set your desired line card height here
+      frameMap: 540        // <-- set your desired map card height here
+    };
+
     function cleanTitleCase(s){
       s = (s || "").trim();
       if(!s) return "";
@@ -245,14 +244,100 @@
         .map(id => document.getElementById(id))
         .filter(Boolean);
 
-      frames.forEach(f => f.contentWindow.postMessage(payload, "*"));
+      frames.forEach(f => {
+        try { f.contentWindow.postMessage(payload, "*"); } catch(e) {}
+      });
     }
 
+    // --------------------------------
+    // Parent-driven sizing (same-origin)
+    // --------------------------------
+    function getDocHeight(doc){
+      if(!doc) return 0;
+      const de = doc.documentElement;
+      const b  = doc.body;
+      return Math.max(
+        de ? de.scrollHeight : 0,
+        de ? de.offsetHeight : 0,
+        b  ? b.scrollHeight  : 0,
+        b  ? b.offsetHeight  : 0
+      ) || 0;
+    }
+
+    function minHeightForFrame(frame){
+      if(!frame || !frame.id) return 120;
+      return (MIN_HEIGHTS[frame.id] || 120);
+    }
+
+    function setFrameHeight(frame, px){
+      if(!frame) return;
+      const min = minHeightForFrame(frame);
+      const h = Math.max(min, Math.ceil(px || 0));
+      frame.style.height = h + "px";
+    }
+
+    function resizeFrameOnce(frame){
+      if(!frame) return false;
+      try{
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        const h = getDocHeight(doc);
+        if(h > 0){
+          setFrameHeight(frame, h);
+          return true;
+        }
+      }catch(e){
+        // likely cross-origin; cannot measure here
+      }
+      return false;
+    }
+
+    function requestHeightsFromChildren(){
+      ["frameSummary","frameLine","frameMap"].forEach(id => {
+        const f = document.getElementById(id);
+        if(!f) return;
+        try { f.contentWindow.postMessage({ type: "REQUEST_IFRAME_HEIGHT" }, "*"); } catch(e) {}
+      });
+    }
+
+    function resizeFramesAggressively(){
+      const ids = ["frameSummary","frameLine","frameMap"];
+      const frames = ids.map(id => document.getElementById(id)).filter(Boolean);
+
+      // Many embedded charts render in waves. Do a timed series of attempts.
+      const delays = [0, 60, 150, 300, 600, 900, 1300, 1800, 2400, 3200, 4200, 5500];
+      delays.forEach(ms => {
+        setTimeout(() => frames.forEach(f => resizeFrameOnce(f)), ms);
+      });
+
+      // Also ask children to report height (works cross-origin if child snippet is installed)
+      delays.forEach(ms => setTimeout(requestHeightsFromChildren, ms));
+    }
+
+    // ----------------------------
+    // Child-reported sizing (works cross-origin)
+    // ----------------------------
+    window.addEventListener("message", (e) => {
+      const d = e.data || {};
+      if(!d || d.type !== "REPORT_IFRAME_HEIGHT") return;
+
+      if(typeof d.frameId !== "string" || typeof d.height !== "number") return;
+
+      const frame = document.getElementById(d.frameId);
+      if(frame) setFrameHeight(frame, d.height);
+    });
+
+    // ----------------------------
+    // Init + Generate behavior
+    // ----------------------------
     function generate(){
       const name = cleanTitleCase(document.getElementById("name").value);
       const state = (document.getElementById("state").value || "").trim().toUpperCase();
       const year = (document.getElementById("year").value || "").trim();
+
       postToFrames({ type: "SET_INPUTS_AND_RUN", name, state, year });
+
+      // Critical: do sizing AFTER triggering render, and keep trying while charts settle
+      resizeFramesAggressively();
     }
 
     document.getElementById("generate").addEventListener("click", generate);
@@ -262,6 +347,42 @@
         if(e.key === "Enter"){ e.preventDefault(); generate(); }
       });
     });
+
+    // On initial load:
+    // - Summary starts compact
+    // - Line/Map start at your manual min heights
+    ["frameSummary","frameLine","frameMap"].forEach(id => {
+      const f = document.getElementById(id);
+      if(!f) return;
+
+      setFrameHeight(f, MIN_HEIGHTS[id] || 140);
+
+      f.addEventListener("load", () => {
+        resizeFrameOnce(f);
+        resizeFramesAggressively();
+      });
+    });
+
+    // ============================================================
+    // FIX: re-measure on resize/orientation changes
+    // ============================================================
+    let __resizeTimer = null;
+    function onViewportChange(){
+      clearTimeout(__resizeTimer);
+      __resizeTimer = setTimeout(() => {
+        // try same-origin measurement AND ask children to report (cross-origin)
+        resizeFramesAggressively();
+      }, 150);
+    }
+
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("orientationchange", () => setTimeout(onViewportChange, 200));
+
+    // iOS Safari: visualViewport changes can fire without a standard resize
+    if(window.visualViewport){
+      window.visualViewport.addEventListener("resize", onViewportChange);
+      window.visualViewport.addEventListener("scroll", onViewportChange);
+    }
   </script>
 </body>
 </html>

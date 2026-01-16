@@ -743,5 +743,55 @@ window.addEventListener("resize", () => {
   }
 });
 </script>
+
+<script>
+  const FRAME_ID = "frameMap";
+
+  function _iframeDocHeight(){
+    const de = document.documentElement;
+    const b  = document.body;
+    return Math.max(
+      de ? de.scrollHeight : 0,
+      de ? de.offsetHeight : 0,
+      b  ? b.scrollHeight  : 0,
+      b  ? b.offsetHeight  : 0
+    ) || 0;
+  }
+
+  function reportHeight(){
+    const h = _iframeDocHeight();
+    window.parent.postMessage({ type: "REPORT_IFRAME_HEIGHT", frameId: FRAME_ID, height: h }, "*");
+  }
+
+  window.addEventListener("message", (e) => {
+    if(e.data && e.data.type === "REQUEST_IFRAME_HEIGHT") reportHeight();
+  });
+
+  window.addEventListener("load", () => {
+    reportHeight();
+    setTimeout(reportHeight, 150);
+    setTimeout(reportHeight, 600);
+    setTimeout(reportHeight, 1200);
+  });
+
+  const mo = new MutationObserver(() => reportHeight());
+  mo.observe(document.documentElement, { childList:true, subtree:true, attributes:true, characterData:true });
+
+function reportHeightSoon(){
+    reportHeight();
+    setTimeout(reportHeight, 120);
+    setTimeout(reportHeight, 300);
+  }
+
+  window.addEventListener("resize", reportHeightSoon);
+  window.addEventListener("orientationchange", () => setTimeout(reportHeightSoon, 180));
+
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", reportHeightSoon);
+    window.visualViewport.addEventListener("scroll", reportHeightSoon);
+  }
+</script>
+
+
 </body>
 </html>

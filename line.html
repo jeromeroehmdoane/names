@@ -71,7 +71,6 @@
       color:#111;
       width:100%;
     }
-    /* If screen is too narrow, stack to avoid overlap */
     @media (max-width: 420px){
       .controlsRow{ flex-direction:column; align-items:stretch; }
       .ctrl{ max-width:100%; min-width:0; }
@@ -90,7 +89,6 @@
       min-height:240px;
     }
 
-    /* Mobile landscape: force plot to fit in view */
     @media (orientation: landscape) and (max-height: 520px){
       .card{ padding:10px; gap:4px; }
       .cardTitle{ font-size:15px; }
@@ -108,7 +106,6 @@
   <div class="card">
     <h2 class="cardTitle" id="cardTitle">Popularity of Name</h2>
 
-    <!-- Dropdowns ABOVE the plot: Y-axis left, Sex right -->
     <div class="controlsRow">
       <div class="ctrl" style="align-items:flex-start;">
         <div class="ctrlLabel">Y-Axis</div>
@@ -130,7 +127,6 @@
       </div>
     </div>
 
-    <!-- hidden local controls; IDs preserved for bridge -->
     <div class="hidden">
       <input id="nameInput" />
       <button id="goBtn">Show</button>
@@ -153,7 +149,16 @@ function groupForName(name){
 }
 
 function setTitle(name){
-  document.getElementById("cardTitle").textContent = name ? `Popularity of ${name}` : "Popularity of Name";
+  document.getElementById("cardTitle").textContent =
+    name ? `Popularity of ${name}` : "Popularity of Name";
+}
+
+function clearPlot(){
+  try{
+    Plotly.purge("plot");
+  }catch(e){}
+  GD = null;
+  SERIES = null;
 }
 
 function loadPlot(name){
@@ -161,27 +166,19 @@ function loadPlot(name){
   if(!name) return;
 
   setTitle(name);
+  document.getElementById("status").textContent = "Loading…";
 
   const g = groupForName(name);
-  document.getElementById("status").textContent = "Loading…";
 
   Papa.parse(`${BASE}small_data_${g}.csv`, {
     download: true,
     header: true,
     skipEmptyLines: true,
-    complete: res => {
-      renderPlot(name, res.data);
-      document.getElementById("status").textContent = "";
-    }
+    complete: res => renderPlot(name, res.data)
   });
 }
 
 function renderPlot(name, rows){
-  // Data model per your clarification:
-  // - No "C" rows.
-  // - percentage is sex-specific (M or F).
-  // - overall_percentage is the combined percentage (same value on M/F rows).
-  // - overall_rank is the combined rank (same value on M/F rows).
   const filtered = rows
     .filter(r => (r.name || "").toLowerCase() === name.toLowerCase())
     .map(r => ({
@@ -195,13 +192,18 @@ function renderPlot(name, rows){
     }))
     .filter(r => Number.isFinite(r.year));
 
+  if(filtered.length === 0){
+    clearPlot();
+    document.getElementById("status").textContent =
+      `No data for "${name}" found. Names with fewer than 5 occurrences in a year are not included in the dataset.`;
+    return;
+  }
+
+  document.getElementById("status").textContent = "";
+
   const m = filtered.filter(r => r.sex === "M").sort((a,b)=>a.year-b.year);
   const f = filtered.filter(r => r.sex === "F").sort((a,b)=>a.year-b.year);
 
-  // Build combined series:
-  // - frequency: M + F (by year)
-  // - overall_percentage: take from either sex row (they match)
-  // - overall_rank: take from either sex row (they match)
   const combinedMap = {};
   function upsert(arr){
     arr.forEach(r => {
@@ -213,267 +215,116 @@ function renderPlot(name, rows){
           overall_rank: r.overall_rank
         };
       }
-      combinedMap[r.year].frequency += (Number.isFinite(r.frequency) ? r.frequency : 0);
-      // Keep overall_* (same on both rows); but if missing on first, allow overwrite with numeric
-      if (Number.isFinite(r.overall_percentage)) combinedMap[r.year].overall_percentage = r.overall_percentage;
-      if (Number.isFinite(r.overall_rank)) combinedMap[r.year].overall_rank = r.overall_rank;
+      combinedMap[r.year].frequency += r.frequency || 0;
     });
   }
   upsert(m); upsert(f);
   const c = Object.values(combinedMap).sort((a,b)=>a.year-b.year);
 
-  // Hover templates:
-  // - Always include Year
-  // - In separate mode, include year + line with Rank/Frequency/Percentage
   const hover = {
-  combined: {
-    frequency: "Year: %{x}<br>Frequency: %{y:,.0f}<extra></extra>",
-    percentage: "Year: %{x}<br>Percentage: %{y:.2f}%<extra></extra>",
-    rank: "Year: %{x}<br>Rank: %{y:,.0f}<extra></extra>"
-  },
-  sexSpecific: {
-    frequency: "Year: %{x}<br>%{fullData.name} Frequency: %{y:,.0f}<extra></extra>",
-    percentage: "Year: %{x}<br>%{fullData.name} Percentage: %{y:.2f}%<extra></extra>",
-    rank: "Year: %{x}<br>%{fullData.name} Rank: %{y:,.0f}<extra></extra>"
-  }
-};
+    combined:{
+      frequency:"Year: %{x}<br>Frequency: %{y:,.0f}<extra></extra>",
+      percentage:"Year: %{x}<br>Percentage: %{y:.2f}%<extra></extra>",
+      rank:"Year: %{x}<br>Rank: %{y:,.0f}<extra></extra>"
+    },
+    sexSpecific:{
+      frequency:"Year: %{x}<br>%{fullData.name} Frequency: %{y:,.0f}<extra></extra>",
+      percentage:"Year: %{x}<br>%{fullData.name} Percentage: %{y:.2f}%<extra></extra>",
+      rank:"Year: %{x}<br>%{fullData.name} Rank: %{y:,.0f}<extra></extra>"
+    }
+  };
 
   const yaxisByMetric = {
     frequency:{title:{text:"Frequency",standoff:14},tickformat:",.0f"},
-    percentage:{title:{text:"Percentage",standoff:14},tickformat:".2f",ticksuffix:"%"},
+    percentage:{title:{text:"Percentage",standoff:14},tickformat:".2f",ticksuffix:"%",rangemode:"tozero"},
     rank:{title:{text:"Rank (log scale)",standoff:14},type:"log",autorange:"reversed"}
   };
 
   SERIES = { c, m, f, hover, yaxisByMetric };
-
-  // Initialize plot from dropdown state
   rebuildPlotFromState();
 }
 
 function yFor(arr, metric, mode){
-  // mode in {"combined","male","female","separate"}
-  if(metric === "frequency"){
-    return arr.map(d => d.frequency);
-  }
+  if(metric === "frequency") return arr.map(d=>d.frequency);
   if(metric === "percentage"){
-    // combined uses overall_percentage; sex-specific uses percentage
-    if(mode === "combined") return arr.map(d => d.overall_percentage);
-    return arr.map(d => d.percentage);
+    return mode==="combined"
+      ? arr.map(d=>d.overall_percentage)
+      : arr.map(d=>d.percentage);
   }
-  // rank metric:
-  // combined uses overall_rank; sex-specific uses rank
-  if(mode === "combined") return arr.map(d => d.overall_rank);
-  return arr.map(d => d.rank);
+  return mode==="combined"
+    ? arr.map(d=>d.overall_rank)
+    : arr.map(d=>d.rank);
 }
 
 function visibilityForSex(mode){
-  if(mode === "separate") return [false,true,true];
-  if(mode === "male") return [false,true,false];
-  if(mode === "female") return [false,false,true];
-  return [true,false,false]; // combined
+  if(mode==="separate") return [false,true,true];
+  if(mode==="male") return [false,true,false];
+  if(mode==="female") return [false,false,true];
+  return [true,false,false];
+}
+
+function shapesForMetric(metric, minRank){
+  if(metric!=="rank" || !Number.isFinite(minRank) || minRank>5) return [];
+  return [{
+    type:"line",
+    xref:"paper",x0:0,x1:1,
+    yref:"y",y0:1,y1:1,
+    line:{color:"rgba(0,0,0,0.18)",width:1}
+  }];
+}
+
+function clampRankAxisNotBelow1(gd){
+  const y = gd?.layout?.yaxis;
+  if(y?.type==="log" && Array.isArray(y.range) && y.range[1]<0){
+    Plotly.relayout(gd, {"yaxis.range[1]":0});
+  }
 }
 
 function rebuildPlotFromState(){
-  if(!SERIES) return;
-
-  const metric = document.getElementById("metricSelect").value || "frequency";
-  const sexMode = document.getElementById("sexSelect").value || "combined";
-
-  const { c, m, f, hover, yaxisByMetric } = SERIES;
-
-  const traces = [
-    {
-      x: c.map(d=>d.year),
-      y: yFor(c, metric, "combined"),
-      mode:"lines",
-      name:"Combined",
-      line:{color:"purple"},
-      hovertemplate: hover.combined[metric]
-    },
-    {
-      x: m.map(d=>d.year),
-      y: yFor(m, metric, "male"),
-      mode:"lines",
-      name:"Male",
-      line:{color:"blue"},
-      visible:false,
-      hovertemplate: hover.combined[metric] // overwritten for separate
-    },
-    {
-      x: f.map(d=>d.year),
-      y: yFor(f, metric, "female"),
-      mode:"lines",
-      name:"Female",
-      line:{color:"red"},
-      visible:false,
-      hovertemplate: hover.combined[metric] // overwritten for separate
-    }
-  ];
-
-  const vis = visibilityForSex(sexMode);
-  traces[0].visible = vis[0];
-  traces[1].visible = vis[1];
-  traces[2].visible = vis[2];
-
-  // Hover behavior:
-  // - For separate: include year + sex label (Male/Female via fullData.name)
-  // - For male/female: treat like combined-style hover (year included)
-  if(sexMode === "separate"){
-    traces[0].hovertemplate = null;
-    traces[1].hovertemplate = hover.sexSpecific[metric];
-    traces[2].hovertemplate = hover.sexSpecific[metric];
-  } else {
-    traces[0].hovertemplate = hover.combined[metric];
-    traces[1].hovertemplate = hover.combined[metric];
-    traces[2].hovertemplate = hover.combined[metric];
-  }
-
-  const isLandscapeShort = (window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
-
-  const layout = {
-    // No Plotly title; title is in the card header
-    xaxis: { title: "Year", fixedrange: true },
-    yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
-    hovermode: "closest",
-    margin: { l: 60, r: 12, t: 10, b: isLandscapeShort ? 30 : 38 },
-    showlegend: false,
-    dragmode: false
-  };
-
-  // Completely disable motion while keeping hover:
-  // - fixedrange on axes
-  // - dragmode false
-  // - scrollZoom false
-  // - doubleClick false
-  // - displayModeBar false
-  const config = {
-    responsive: true,
-    displayModeBar: false,
-    scrollZoom: false,
-    doubleClick: false
-  };
-
-  Plotly.newPlot("plot", traces, layout, config).then(gd => {
-    GD = gd;
-
-    // Extra safety: prevent touch/drag from initiating plot interactions.
-    // Hover still works; vertical swipes scroll the page.
-    try {
-      gd.on("plotly_relayouting", () => false);
-    } catch(e) {}
-  });
-}
-
-function applyDropdowns(){
-  if(!GD || !SERIES){
-    // If plot isn't built yet, ignore
-    return;
-  }
-
-  const metric = document.getElementById("metricSelect").value || "frequency";
-  const sexMode = document.getElementById("sexSelect").value || "combined";
-
-  const { c, m, f, hover, yaxisByMetric } = SERIES;
-
-  const newY = [
-    yFor(c, metric, "combined"),
-    yFor(m, metric, "male"),
-    yFor(f, metric, "female")
-  ];
+  const metric = metricSelect.value;
+  const sexMode = sexSelect.value;
+  const {c,m,f,hover,yaxisByMetric} = SERIES;
 
   const vis = visibilityForSex(sexMode);
 
-  const newHover = (sexMode === "separate")
-    ? [null, hover.sexSpecific[metric], hover.sexSpecific[metric]]
-    : [hover.combined[metric], hover.combined[metric], hover.combined[metric]];
+  let minRank = NaN;
+  if(metric==="rank"){
+    minRank = Math.min(
+      ...(vis[0]?yFor(c,"rank","combined"):[]),
+      ...(vis[1]?yFor(m,"rank","male"):[]),
+      ...(vis[2]?yFor(f,"rank","female"):[])
+    );
+  }
 
-  const isLandscapeShort = (window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
-
-  Plotly.update(GD, {
-    y: newY,
-    visible: vis,
-    hovertemplate: newHover
-  }, {
-    xaxis: Object.assign({}, (GD.layout.xaxis || {}), { fixedrange: true }),
-    yaxis: Object.assign({}, yaxisByMetric[metric], { fixedrange: true }),
-    dragmode: false,
-    margin: Object.assign({}, (GD.layout.margin || {}), { b: isLandscapeShort ? 30 : 38 })
+  Plotly.newPlot("plot",[
+    {x:c.map(d=>d.year),y:yFor(c,metric,"combined"),mode:"lines",name:"Combined",line:{color:"purple"},visible:vis[0],hovertemplate:hover.combined[metric]},
+    {x:m.map(d=>d.year),y:yFor(m,metric,"male"),mode:"lines",name:"Male",line:{color:"blue"},visible:vis[1],hovertemplate:hover.sexSpecific[metric]},
+    {x:f.map(d=>d.year),y:yFor(f,metric,"female"),mode:"lines",name:"Female",line:{color:"red"},visible:vis[2],hovertemplate:hover.sexSpecific[metric]}
+  ],{
+    xaxis:{title:"Year",fixedrange:true},
+    yaxis:{...yaxisByMetric[metric],fixedrange:true},
+    hovermode:"closest",
+    margin:{l:60,r:12,t:10,b:38},
+    showlegend:false,
+    dragmode:false,
+    shapes:shapesForMetric(metric,minRank)
+  },{
+    responsive:true,
+    displayModeBar:false
+  }).then(gd=>{
+    GD=gd;
+    if(metric==="rank") clampRankAxisNotBelow1(gd);
   });
 }
 
-document.getElementById("metricSelect").addEventListener("change", applyDropdowns);
-document.getElementById("sexSelect").addEventListener("change", applyDropdowns);
+metricSelect.onchange = sexSelect.onchange = rebuildPlotFromState;
 
-// Hidden legacy controls (kept for bridge)
-document.getElementById("goBtn").onclick = () => loadPlot(document.getElementById("nameInput").value);
-document.getElementById("nameInput").addEventListener("keydown", e => { if(e.key === "Enter") loadPlot(e.target.value); });
-
-// Receive inputs from parent index.html
-window.addEventListener("message", (event) => {
-  const d = event.data || {};
-  if (d.type !== "SET_INPUTS_AND_RUN") return;
-
-  if (typeof d.name === "string") {
-    document.getElementById("nameInput").value = d.name;
-    loadPlot(d.name);
+window.addEventListener("message",e=>{
+  if(e.data?.type==="SET_INPUTS_AND_RUN"){
+    nameInput.value=e.data.name;
+    loadPlot(e.data.name);
   }
-});
-
-// Optional: when orientation changes, keep plot fitting nicely
-window.addEventListener("orientationchange", () => {
-  try { setTimeout(() => { if(SERIES) rebuildPlotFromState(); }, 200); } catch(e) {}
 });
 </script>
-
 </body>
-
-<script>
-  const FRAME_ID = "frameLine";
-
-  function _iframeDocHeight(){
-    const de = document.documentElement;
-    const b  = document.body;
-    return Math.max(
-      de ? de.scrollHeight : 0,
-      de ? de.offsetHeight : 0,
-      b  ? b.scrollHeight  : 0,
-      b  ? b.offsetHeight  : 0
-    ) || 0;
-  }
-
-  function reportHeight(){
-    const h = _iframeDocHeight();
-    window.parent.postMessage({ type: "REPORT_IFRAME_HEIGHT", frameId: FRAME_ID, height: h }, "*");
-  }
-
-  window.addEventListener("message", (e) => {
-    if(e.data && e.data.type === "REQUEST_IFRAME_HEIGHT") reportHeight();
-  });
-
-  window.addEventListener("load", () => {
-    reportHeight();
-    setTimeout(reportHeight, 150);
-    setTimeout(reportHeight, 600);
-    setTimeout(reportHeight, 1200);
-  });
-
-  const mo = new MutationObserver(() => reportHeight());
-  mo.observe(document.documentElement, { childList:true, subtree:true, attributes:true, characterData:true });
-
-function reportHeightSoon(){
-    reportHeight();
-    setTimeout(reportHeight, 120);
-    setTimeout(reportHeight, 300);
-  }
-
-  window.addEventListener("resize", reportHeightSoon);
-  window.addEventListener("orientationchange", () => setTimeout(reportHeightSoon, 180));
-
-  if(window.visualViewport){
-    window.visualViewport.addEventListener("resize", reportHeightSoon);
-    window.visualViewport.addEventListener("scroll", reportHeightSoon);
-  }
-</script>
-
-
 </html>

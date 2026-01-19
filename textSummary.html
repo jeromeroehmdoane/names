@@ -69,6 +69,20 @@
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background: #f1f3f5; }
 
+   table{
+  font-size: 13px;
+}
+
+th{
+  font-size: 14px;
+}
+
+td{
+  font-size: 13px;
+}
+
+
+
     /* ---------- Text blocks (replace gray <pre>) ---------- */
     .statBlock{
       border: 1px solid rgba(17,24,39,0.08);
@@ -497,7 +511,7 @@
 
       if (match.length === 0) {
         overallCard.innerHTML = `<h2>Overall Summary (All Time)</h2>`;
-        overallCard.appendChild(makeTextBlock(`No overall summary data found for name '${name}'.`));
+        overallCard.appendChild(makeTextBlock(`No data for "${name}" found. Names with fewer than 5 occurrences in a year are not included in the dataset.`));
       } else {
         const r = match[0];
 
@@ -980,7 +994,9 @@
   }
 
   window.addEventListener("message", (e) => {
-    if(e.data && e.data.type === "REQUEST_IFRAME_HEIGHT") reportHeight();
+    const d = e.data || {};
+    if(d.type === "REQUEST_IFRAME_HEIGHT") reportHeightBurst();
+    if(d.type === "SET_INPUTS_AND_RUN") reportHeightBurst();
   });
 
   window.addEventListener("load", () => {

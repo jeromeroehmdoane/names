@@ -647,7 +647,7 @@ async function render(){
       );
 
     if(baseRows.length === 0){
-      setStatus(`No data found for "${nameRaw}" in the ${letter} file.`);
+      setStatus(`No data for "${nameRaw}" found. Names with fewer than 5 occurrences in a year are not included in the dataset.`);
       Plotly.purge("plot");
       return;
     }
